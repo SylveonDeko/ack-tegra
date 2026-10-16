@@ -221,6 +221,8 @@
 #define XUSB_PADCTL_UPHY_MISC_PAD_CTL1_AUX_RX_TERM_EN BIT(18)
 #define XUSB_PADCTL_UPHY_MISC_PAD_CTL1_AUX_RX_MODE_OVRD BIT(13)
 
+#define XUSB_PADCTL_UPHY_MISC_PAD_PX_CTL8(x) (0x47c + (x) * 0x40)
+
 #define XUSB_PADCTL_UPHY_MISC_PAD_PX_CTL2(x) (0x464 + (x) * 0x40)
 #define XUSB_PADCTL_UPHY_MISC_PAD_CTL2_TX_IDDQ BIT(0)
 #define XUSB_PADCTL_UPHY_MISC_PAD_CTL2_TX_IDDQ_OVRD BIT(1)
@@ -430,6 +432,20 @@ static struct init_data tegra210b01_usb3_pll_g1_init_data[] = {
 	{.cfg_addr = 0x1E, .cfg_wdata = 0x0017},
 };
 
+static struct init_data tegra210b01_usb3_lane_init_data[] = {
+	{.cfg_addr = 0x1,  .cfg_wdata = 0x0002},
+	{.cfg_addr = 0x4,  .cfg_wdata = 0x0032},
+	{.cfg_addr = 0x7,  .cfg_wdata = 0x0022},
+	{.cfg_addr = 0x35, .cfg_wdata = 0x2587},
+	{.cfg_addr = 0x49, .cfg_wdata = 0x0FC7},
+	{.cfg_addr = 0x52, .cfg_wdata = 0x0001},
+	{.cfg_addr = 0x53, .cfg_wdata = 0x3C0F},
+	{.cfg_addr = 0x56, .cfg_wdata = 0xC00F},
+	{.cfg_addr = 0x5D, .cfg_wdata = 0xFF07},
+	{.cfg_addr = 0x5E, .cfg_wdata = 0x141A},
+	{.cfg_addr = 0x97, .cfg_wdata = 0x0080},
+};
+
 struct tegra210_xusb_fuse_calibration {
 	u32 hs_curr_level[4];
 	u32 hs_term_range_adj;
@@ -530,6 +546,31 @@ static int tegra210_usb3_lane_map(struct tegra_xusb_lane *lane)
 	return -EINVAL;
 }
 
+static void tegra210b01_usb3_lane_init(struct tegra_xusb_padctl *padctl)
+{
+	struct tegra_xusb_lane *lane;
+	unsigned int i, j;
+	u32 value;
+
+	for (i = 0; i < padctl->pcie->soc->num_lanes; i++) {
+		if (!padctl->pcie->lanes[i])
+			continue;
+
+		lane = phy_get_drvdata(padctl->pcie->lanes[i]);
+		if (!tegra_xusb_lane_check(lane, "usb3-ss"))
+			continue;
+
+		for (j = 0; j < ARRAY_SIZE(tegra210b01_usb3_lane_init_data); j++) {
+			value = CFG_ADDR(tegra210b01_usb3_lane_init_data[j].cfg_addr);
+			value |= CFG_WDATA(tegra210b01_usb3_lane_init_data[j].cfg_wdata);
+			value |= CFG_RESET;
+			value |= CFG_WS;
+			padctl_writel(padctl, value,
+				      XUSB_PADCTL_UPHY_MISC_PAD_PX_CTL8(lane->index));
+		}
+	}
+}
+
 /* must be called under padctl->lock */
 static int tegra210_pex_uphy_enable(struct tegra_xusb_padctl *padctl)
 {
@@ -570,21 +611,23 @@ static int tegra210_pex_uphy_enable(struct tegra_xusb_padctl *padctl)
 			padctl_writel(padctl, value,
 					XUSB_PADCTL_UPHY_PLL_S0_CTL10);
 		}
+
+		tegra210b01_usb3_lane_init(padctl);
+	} else {
+		value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
+		value &= ~(XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_MASK <<
+			   XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_SHIFT);
+		value |= XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_VAL <<
+			 XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_SHIFT;
+		padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
+
+		value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL5);
+		value &= ~(XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_MASK <<
+			   XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_SHIFT);
+		value |= XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_VAL <<
+			 XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_SHIFT;
+		padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL5);
 	}
-
-	value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
-	value &= ~(XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_MASK <<
-		   XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_SHIFT);
-	value |= XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_VAL <<
-		 XUSB_PADCTL_UPHY_PLL_CTL2_CAL_CTRL_SHIFT;
-	padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL2);
-
-	value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL5);
-	value &= ~(XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_MASK <<
-		   XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_SHIFT);
-	value |= XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_VAL <<
-		 XUSB_PADCTL_UPHY_PLL_CTL5_DCO_CTRL_SHIFT;
-	padctl_writel(padctl, value, XUSB_PADCTL_UPHY_PLL_P0_CTL5);
 
 	value = padctl_readl(padctl, XUSB_PADCTL_UPHY_PLL_P0_CTL1);
 	value |= XUSB_PADCTL_UPHY_PLL_CTL1_PWR_OVRD;
