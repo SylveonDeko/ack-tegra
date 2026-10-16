@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: GPL-2.0
+/dts-v1/;
+
+#include "tegra210.dtsi"
+#include "tegra210-p2894.dtsi"
+
+/ {
+	model = "NVIDIA Shield TV";
+	compatible = "nvidia,p2894-0050-a08", "nvidia,darcy", "nvidia,tegra210";
+
+	mmc@700b0200 {
+		status = "okay";
+		bus-width = <4>;
+		non-removable;
+		power-gpios = <&gpio TEGRA_GPIO(H, 0) GPIO_ACTIVE_HIGH>;
+		vqmmc-supply = <&max77620_sd3>;
+		vmmc-supply = <&vdd_3v3>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		wifi@1 {
+			compatible = "brcm,bcm4354-fmac", "brcm,bcm4329-fmac";
+			reg = <1>;
+			interrupt-parent = <&gpio>;
+			interrupts = <TEGRA_GPIO(H, 2) IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "host-wake";
+		};
+	};
+};

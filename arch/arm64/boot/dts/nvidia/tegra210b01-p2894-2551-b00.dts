@@ -1,0 +1,108 @@
+// SPDX-License-Identifier: GPL-2.0
+/dts-v1/;
+
+#include "tegra210b01.dtsi"
+#include "tegra210-p2894.dtsi"
+
+/ {
+	model = "NVIDIA Shield TV Pro 2019";
+	compatible = "nvidia,p2894-2551-b00", "nvidia,darcy", "nvidia,tegra210b01",
+		"nvidia,tegra210";
+
+	pcie@1003000 {
+		pci@1,0 {
+			phys = <&{/padctl@7009f000/pads/pcie/lanes/pcie-3}>,
+			       <&{/padctl@7009f000/pads/pcie/lanes/pcie-2}>;
+			phy-names = "pcie-0", "pcie-1";
+			status = "okay";
+
+			wifi@0,0 {
+				compatible = "brcm,bcm4356-fmac", "brcm,bcm4329-fmac";
+			};
+		};
+	};
+
+	gpio@6000d000 {
+		wlreg-hog {
+			gpio-hog;
+			gpios = <TEGRA_GPIO(H, 0) GPIO_ACTIVE_HIGH>;
+			output-high;
+			line-name = "wlreg_on";
+		};
+	};
+
+	pinmux@700008d4 {
+		pinmux {
+			pex_l0_rst_n_pa0 {
+				nvidia,function = "pe0";
+				nvidia,pull = <TEGRA_PIN_PULL_UP>;
+				nvidia,tristate = <TEGRA_PIN_DISABLE>;
+			};
+			pex_l0_clkreq_n_pa1 {
+				nvidia,pull = <TEGRA_PIN_PULL_UP>;
+				nvidia,io-hv = <TEGRA_PIN_DISABLE>;
+			};
+			pex_wake_n_pa2 {
+				nvidia,pull = <TEGRA_PIN_PULL_UP>;
+				nvidia,tristate = <TEGRA_PIN_ENABLE>;
+				nvidia,io-hv = <TEGRA_PIN_DISABLE>;
+			};
+			wifi_wake_ap_ph2 {
+				nvidia,pull = <TEGRA_PIN_PULL_NONE>;
+			};
+			pz1 {
+				nvidia,pull = <TEGRA_PIN_PULL_UP>;
+			};
+		};
+	};
+
+	i2c@7000d000 {
+		pmic@3c {
+			regulators {
+				sd2 {
+					regulator-min-microvolt = <1350000>;
+					regulator-max-microvolt = <1350000>;
+				};
+			};
+		};
+	};
+
+	usb@70090000 {
+		phys = <&{/padctl@7009f000/pads/usb2/lanes/usb2-0}>,
+		       <&{/padctl@7009f000/pads/usb2/lanes/usb2-2}>,
+		       <&{/padctl@7009f000/pads/pcie/lanes/pcie-5}>,
+		       <&{/padctl@7009f000/pads/pcie/lanes/pcie-4}>;
+		phy-names = "usb2-0", "usb2-2", "usb3-0", "usb3-1";
+		dvddio-pex-supply = <&max77620_ldo1>;
+		hvddio-pex-supply = <&max77620_sd3>;
+		avdd-usb-supply = <&vdd_3v3>;
+
+		status = "okay";
+	};
+
+	padctl@7009f000 {
+		pads {
+			pcie {
+				lanes {
+					pcie-1 {
+						nvidia,function = "usb3-ss";
+					};
+
+					pcie-4 {
+						nvidia,function = "usb3-ss";
+					};
+
+					pcie-6 {
+						/delete-property/ nvidia,function;
+						status = "disabled";
+					};
+				};
+			};
+		};
+	};
+
+	usb@700d0000 {
+		phys = <&{/padctl@7009f000/pads/usb2/lanes/usb2-0}>,
+		       <&{/padctl@7009f000/pads/pcie/lanes/pcie-5}>;
+	};
+};

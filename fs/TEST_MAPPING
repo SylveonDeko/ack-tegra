@@ -1,0 +1,47 @@
+{
+  "imports": [
+    {
+      "path": "cts/tests/tests/drm"
+    },
+    {
+      "path": "frameworks/base/apex/jobscheduler/service/java/com/android/server/job"
+    },
+    {
+      "path": "frameworks/base/core/java/android/content"
+    },
+    {
+      "path": "frameworks/base/media"
+    },
+    {
+      "path": "frameworks/base/packages/PackageInstaller"
+    },
+    {
+      "path": "frameworks/base/services/core/java/com/android/server"
+    },
+    {
+      "path": "frameworks/base/services/incremental"
+    },
+    {
+      "path": "packages/modules/AdServices/sdksandbox"
+    },
+    {
+      "path": "system/core/fs_mgr"
+    },
+    {
+      "path": "test/vts-testcase/kernel/api"
+    },
+    {
+      "path": "test/vts-testcase/kernel/dynamic_partitions"
+    }
+  ],
+  "kernel-presubmit": [
+    {
+      "name": "CtsWifiBroadcastsHostTestCases"
+    }
+  ],
+  "presubmit": [
+    {
+      "name": "snapuserd_test"
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+<6>[    0.505994] bm92t 0-0018: bm92t_probe
+<6>[    0.506468] bm92t 0-0018: DP handling disabled
+<6>[    0.508019] bm92t 0-0018: fw_type: 0x603, fw_rev: 0xD7C
+<7>[    0.508615] bm92t 0-0018: write reg cmd = 0x06 len = 3
+<6>[    0.509242] bm92t 0-0018: bm92t_debug_init
+<6>[    0.519206] bm92t 0-0018: init done
+<7>[    0.621689] bm92t 0-0018: Disabling VBUS
+<3>[    0.623565] bm92t 0-0018: Unknown cmd rejected!
+<4>[    0.623586] bm92t 0-0018: Invalid state, initiating SYS Reset!
+<7>[    0.623626] bm92t 0-0018: write reg cmd = 0x05 len = 3
+<7>[    0.624129] bm92t 0-0018: Sent cmd 0x0D 0x0D return value 0
+<7>[    0.727667] bm92t 0-0018: write reg cmd = 0x06 len = 3
+<7>[    0.728199] bm92t 0-0018: write reg cmd = 0x19 len = 3
+<6>[    0.728696] bm92t 0-0018: extcon cable is set to init state
+<6>[    0.840258] bm92t 0-0018: Alert= 0x0008 Status1= 0x1A80 Status2= 0x2000 DP= 0x4000 State= INIT_STATE
+<7>[    0.840297] bm92t 0-0018: Enabling VBUS
+<6>[    1.069745] bm92t 0-0018: extcon cable (02: USB HOST) attached
+<6>[    1.072449] bm92t 0-0018: Alert= 0x0008 Status1= 0x0D80 Status2= 0x0000 DP= 0x4000 State= INIT_STATE
+<6>[    1.095097] bm92t 0-0018: Alert= 0x4000 Status1= 0x0D80 Status2= 0x0000 DP= 0x4000 State= INIT_STATE
+<6>[    1.137871] bm92t 0-0018: Alert= 0x1000 Status1= 0x4D80 Status2= 0x0000 DP= 0x4000 State= INIT_STATE
+<6>[    1.141067] bm92t 0-0018: Supported PDOs:
+<6>[    1.141089] bm92t 0-0018: PDO 1: 1500mA  5000mV DRD
+<6>[    1.141104] bm92t 0-0018: Device in powered mode
+<6>[    1.141120] bm92t 0-0018: Requesting 1: min 900mA, max 1500mA,  5000mV
+<7>[    1.141138] bm92t 0-0018: write reg cmd = 0x30 len = 6
+<7>[    1.141930] bm92t 0-0018: write reg cmd = 0x05 len = 3
+<7>[    1.142422] bm92t 0-0018: Sent cmd 0x07 0x07 return value 0
+<7>[    1.142438] bm92t 0-0018: state = NEW_PDO
+<6>[    1.166166] bm92t 0-0018: Alert= 0x0004 Status1= 0x4D80 Status2= 0x0000 DP= 0x4000 State= NEW_PDO
+<7>[    1.166200] bm92t 0-0018: cmd done in NEW_PDO state
+<6>[    1.189414] bm92t 0-0018: Alert= 0x1000 Status1= 0x4D80 Status2= 0x0000 DP= 0x4000 State= NEW_PDO
+<6>[    1.191193] bm92t 0-0018: New PD Contract:
+<6>[    1.191212] bm92t 0-0018: PDO: 1: 1500mA, 5000mV
+<6>[    1.191224] bm92t 0-0018: RDO: op 900mA, 1500mA max
+<7>[    1.191240] bm92t 0-0018: write reg cmd = 0x05 len = 3
+<7>[    1.191734] bm92t 0-0018: Sent cmd 0x05 0x05 return value 0
+<7>[    1.191750] bm92t 0-0018: state = PS_RDY_SENT
+<6>[    1.194256] bm92t 0-0018: Alert= 0x0004 Status1= 0x4D80 Status2= 0x0000 DP= 0x4000 State= PS_RDY_SENT
+<7>[    1.194287] bm92t 0-0018: write reg cmd = 0x05 len = 3
+<7>[    1.194804] bm92t 0-0018: Sent cmd 0x18 0x18 return value 0
+<7>[    1.194818] bm92t 0-0018: state = DR_SWAP_SENT
+<6>[    1.203046] bm92t 0-0018: Alert= 0x0004 Status1= 0x4DE0 Status2= 0x0000 DP= 0x4000 State= DR_SWAP_SENT
+<3>[    1.203075] bm92t 0-0018: DR_SWAP_CMD rejected!
+<6>[    1.203093] bm92t 0-0018: extcon cable (02: USB HOST) detached
+<6>[    1.203168] bm92t 0-0018: extcon cable (01: USB) attached
+<7>[    1.203195] bm92t 0-0018: state = INIT_STATE
+<6>[    2.131526] bm92t 0-0018: Alert= 0x0800 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+<6>[    3.216479] bm92t 0-0018: Set Charging Current Limit 900ma

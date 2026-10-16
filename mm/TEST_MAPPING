@@ -1,0 +1,35 @@
+{
+  "imports": [
+    {
+      "path": "bionic"
+    },
+    {
+      "path": "frameworks/base"
+    },
+    {
+      "path": "frameworks/native"
+    },
+    {
+      "path": "system/memory"
+    },
+    {
+      "path": "system/core"
+    },
+    {
+      "path": "frameworks/native"
+    },
+    {
+      "path": "test/vts-testcase/kernel/abi"
+    }
+  ],
+  "presubmit": [
+    {
+      "name": "CtsJobSchedulerTestCases"
+    }
+  ],
+  "kernel-presubmit": [
+    {
+      "name": "CtsIncrementalInstallHostTestCases"
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "imports": [
+    {
+      "path": "cts/tests/tests/libcorelegacy22"
+    },
+    {
+      "path": "frameworks/base/services/core/java/com/android/server"
+    },
+    {
+      "path": "packages/modules/Connectivity"
+    },
+    {
+      "path": "packages/modules/Wifi"
+    },
+    {
+      "path": "packages/services/Telecomm"
+    },
+    {
+      "path": "kernel/tests/net/test"
+    },
+    {
+      "path": "frameworks/base/services/incremental"
+    },
+    {
+      "path": "test/cts-root/tests/bluetooth"
+    }
+  ],
+  "presubmit": [
+    {
+      "name": "CtsJobSchedulerTestCases",
+      "options": [
+        {
+          "include-filter": "android.jobscheduler.cts.ConnectivityConstraintTest#testCellularConstraintExecutedAndStopped"
+        },
+        {
+          "include-filter": "android.jobscheduler.cts.ConnectivityConstraintTest#testConnectivityConstraintExecutes_transitionNetworks"
+        },
+        {
+          "include-filter": "android.jobscheduler.cts.ConnectivityConstraintTest#testConnectivityConstraintExecutes_withMobile"
+        },
+        {
+          "include-filter": "android.jobscheduler.cts.ConnectivityConstraintTest#testEJMeteredConstraintFails_withMobile_DataSaverOn"
+        },
+        {
+          "include-filter": "android.jobscheduler.cts.ConnectivityConstraintTest#testMeteredConstraintFails_withMobile_DataSaverOn"
+        }
+      ]
+    }
+  ],
+  "kernel-presubmit": [
+    {
+      "name": "CtsNetTestCasesLatestSdk",
+      "options": [
+        {
+          "exclude-annotation": "com.android.testutils.SkipPresubmit"
+        }
+      ]
+    },
+    {
+      "name": "CtsWifiBroadcastsHostTestCases",
+      "options": [
+        {
+          "exclude-annotation": "com.android.testutils.SkipPresubmit"
+        }
+      ]
+    }
+  ]
+}

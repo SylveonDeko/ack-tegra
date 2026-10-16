@@ -1,0 +1,72 @@
+[    0.513067][    T1] /i2c@7000c000/bm92t@18: Fixed dependency cycle(s) with /padctl@7009f000
+[    0.513632][    T1] /padctl@7009f000: Fixed dependency cycle(s) with /i2c@7000c000/bm92t@18
+[    3.774932][    T1] /padctl@7009f000: Fixed dependency cycle(s) with /i2c@7000c000/bm92t@18
+[    3.781706][    T1] /i2c@7000c000/bm92t@18: Fixed dependency cycle(s) with /padctl@7009f000
+[    4.999891][    T1] bm92t 0-0018: DP handling disabled
+[    5.005789][    T1] bm92t 0-0018: fw_type: 0x603, fw_rev: 0xD7C
+[    5.010151][    T1] bm92t 0-0018: write reg cmd = 0x06 len = 3
+[    5.029128][    T1] bm92t 0-0018: init done
+[    5.133260][   T76] bm92t 0-0018: Disabling VBUS
+[    5.139599][   T76] bm92t 0-0018: Unknown cmd rejected!
+[    5.150059][   T76] bm92t 0-0018: Invalid state, initiating SYS Reset!
+[    5.163413][   T76] bm92t 0-0018: write reg cmd = 0x05 len = 3
+[    5.174663][   T76] bm92t 0-0018: Sent cmd 0x0D 0x0D return value 0
+[    5.284905][   T76] bm92t 0-0018: write reg cmd = 0x06 len = 3
+[    5.289002][   T76] bm92t 0-0018: write reg cmd = 0x19 len = 3
+[    5.294828][   T76] bm92t 0-0018: extcon cable is set to init state
+[    5.409602][   T14] bm92t 0-0018: Alert= 0x0000 Status1= 0x0000 Status2= 0x0000 DP= 0x0000 State= INIT_STATE
+[    5.419830][   T14] bm92t 0-0018: Alert= 0x0000 Status1= 0x0000 Status2= 0x0000 DP= 0x0000 State= INIT_STATE
+[    5.430023][   T14] bm92t 0-0018: Alert= 0x0000 Status1= 0x0000 Status2= 0x0000 DP= 0x0000 State= INIT_STATE
+[    5.440217][   T14] bm92t 0-0018: Alert= 0x0000 Status1= 0x0000 Status2= 0x0000 DP= 0x0000 State= INIT_STATE
+[    5.450404][   T14] bm92t 0-0018: Alert= 0x0000 Status1= 0x0000 Status2= 0x0000 DP= 0x0000 State= INIT_STATE
+[    5.460599][   T14] bm92t 0-0018: Alert= 0x0000 Status1= 0x0000 Status2= 0x0000 DP= 0x0000 State= INIT_STATE
+[    5.470791][   T14] bm92t 0-0018: Alert= 0x0000 Status1= 0x0000 Status2= 0x0000 DP= 0x0000 State= INIT_STATE
+[    5.480977][   T14] bm92t 0-0018: Alert= 0x0000 Status1= 0x0000 Status2= 0x0000 DP= 0x0000 State= INIT_STATE
+[    5.491180][   T14] bm92t 0-0018: Alert= 0x0000 Status1= 0x0000 Status2= 0x0000 DP= 0x0000 State= INIT_STATE
+[    5.501370][   T14] bm92t 0-0018: Alert= 0x0000 Status1= 0x0D80 Status2= 0x0000 DP= 0x4000 State= INIT_STATE
+[    5.601170][   T12] bm92t 0-0018: Supported PDOs:
+[    5.603621][   T12] bm92t 0-0018: PDO 1: 1500mA  5000mV DRD
+[    5.609164][   T12] bm92t 0-0018: Device in powered mode
+[    5.614444][   T12] bm92t 0-0018: Requesting 1: min 900mA, max 1500mA,  5000mV
+[    5.621646][   T12] bm92t 0-0018: write reg cmd = 0x30 len = 6
+[    5.628227][   T12] bm92t 0-0018: write reg cmd = 0x05 len = 3
+[    5.633748][   T12] bm92t 0-0018: Sent cmd 0x07 0x07 return value 0
+[    5.639500][   T12] bm92t 0-0018: state = NEW_PDO
+[    5.669385][   T12] bm92t 0-0018: cmd done in NEW_PDO state
+[    5.682390][   T14] bm92t 0-0018: New PD Contract:
+[    5.684930][   T14] bm92t 0-0018: PDO: 1: 1500mA, 5000mV
+[    5.690203][   T14] bm92t 0-0018: RDO: op 900mA, 1500mA max
+[    5.695750][   T14] bm92t 0-0018: write reg cmd = 0x05 len = 3
+[    5.702053][   T14] bm92t 0-0018: Sent cmd 0x05 0x05 return value 0
+[    5.707809][   T14] bm92t 0-0018: state = PS_RDY_SENT
+[    5.715462][   T14] bm92t 0-0018: extcon cable (02: USB HOST) attached
+[    5.719728][   T14] bm92t 0-0018: write reg cmd = 0x05 len = 3
+[    5.726030][   T14] bm92t 0-0018: Sent cmd 0x18 0x18 return value 0
+[    5.731775][   T14] bm92t 0-0018: state = DR_SWAP_SENT
+[    5.739509][   T14] bm92t 0-0018: DR_SWAP_CMD rejected!
+[    5.742450][   T14] bm92t 0-0018: extcon cable (02: USB HOST) detached
+[    5.749002][   T14] bm92t 0-0018: extcon cable (01: USB) attached
+[    5.755045][   T14] bm92t 0-0018: state = INIT_STATE
+[    7.750906][   T76] bm92t 0-0018: Set Charging Current Limit 900ma
+[   10.413696][   T12] bm92t_event_handler: 1554 callbacks suppressed
+[   10.413707][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   10.430124][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   10.440606][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   10.450832][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   10.461080][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   10.471307][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   10.481507][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   10.491702][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   10.501887][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   10.512081][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   15.415942][   T55] bm92t_event_handler: 1865 callbacks suppressed
+[   15.415949][   T55] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   15.432305][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   15.442506][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   15.452721][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   15.462926][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   15.473114][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   15.483314][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   15.493520][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   15.503715][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
+[   15.513916][   T12] bm92t 0-0018: Alert= 0x0000 Status1= 0x4DE0 Status2= 0x0001 DP= 0x4000 State= INIT_STATE
