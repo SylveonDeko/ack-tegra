@@ -53,6 +53,10 @@
 #define DCS_CONTROL_DISPLAY_DIMMING_CTRL     ((u8)BIT(3))
 #define DCS_CONTROL_DISPLAY_BRIGHTNESS_CTRL  ((u8)BIT(5))
 
+#define DCS_SM_BRIGHTNESS_MAX                2047
+#define DCS_SM_DUTY_MAX                      255
+#define DCS_SM_DUTY_DEFAULT                  150
+
 /* OLED Panels color mode */
 #define DCS_SM_COLOR_MODE_SATURATED          ((u8)0x00) /* Disabled. Similar to vivid but over-saturated. Wide gamut? */
 #define DCS_SM_COLOR_MODE_WASHED             ((u8)0x45)
@@ -110,6 +114,7 @@ struct nx_panel {
 
 	bool prepared;
 	bool enabled;
+	bool dcs_backlight;
 
 	const struct drm_display_mode *mode;
 	enum drm_panel_orientation orientation;
@@ -131,6 +136,7 @@ struct init_cmd init_cmds_default[] = {
 		0xFF,
 		20,
 	},
+	{ MIPI_DCS_NOP, -1, { 0x00 } },
 };
 
 struct init_cmd init_cmds_PANEL_JDI_XXX062M[] = {
@@ -193,35 +199,41 @@ struct init_cmd suspend_cmds_PANEL_JDI_XXX062M[] = {
 };
 
 struct init_cmd init_cmds_PANEL_SAM_AMS699VC01[] = {
-	{ MIPI_DCS_EXIT_SLEEP_MODE, 2, { 0x00, 0x0 } },
+	{ MIPI_DCS_EXIT_SLEEP_MODE, 0, { 0x00 } },
 	{
 		0xFF,
 		180,
 	},
 
 	// Set color mode to basic (natural). Stock is Saturated (0x00). (Reset value is 0x20).
-	{ MIPI_DCS_PRIV_SM_SET_COLOR_MODE, 2, { 0x23, 0x0 } },
+	{ MIPI_DCS_PRIV_SM_SET_COLOR_MODE, 1, { DCS_SM_COLOR_MODE_BASIC } },
 
 	// Enable backlight and smooth PWM.
-	{ MIPI_DCS_WRITE_CONTROL_DISPLAY, 2, { 0x28, 0x0 } },
+	{ MIPI_DCS_WRITE_CONTROL_DISPLAY, 1, { DCS_CONTROL_DISPLAY_BRIGHTNESS_CTRL | DCS_CONTROL_DISPLAY_DIMMING_CTRL } },
 
 	// Unlock Level 2 registers.
-	{ 0x05, 9, { 0x0, 0x0, 0xE2, 0x5A, 0x5A, 0x5A, 0x5A, 0x0, 0x0 } },
+	{ MIPI_DCS_PRIV_SM_SET_REGS_LOCK, 4, { 0x5A, 0x5A, 0x5A, 0x5A } },
 
 	// Set registers offset and set PWM transition to 6 frames (100ms).
-	{ MIPI_DCS_PRIV_SM_SET_REG_OFFSET, 2, { 0x07, 0x0 } },
-	{ MIPI_DCS_PRIV_SM_SET_ELVSS, 2, { 0x06, 0x0 } },
+	{ MIPI_DCS_PRIV_SM_SET_REG_OFFSET, 1, { 0x07 } },
+	{ MIPI_DCS_PRIV_SM_SET_ELVSS, 1, { 0x06 } },
 
 	// Relock Level 2 registers.
-	{ 0x05, 9, { 0x0, 0x0, 0xE2, 0x5A, 0x5A, 0xA5, 0xA5, 0x0, 0x0 } },
+	{ MIPI_DCS_PRIV_SM_SET_REGS_LOCK, 4, { 0x5A, 0x5A, 0xA5, 0xA5 } },
 
-	// MIPI_DCS_SET_BRIGHTNESS 0000: 0%. FF07: 100%.
-	{ 0x03, 7, { 0x00, 0x00, 0x51, 0x0, 0x0, 0x0, 0x0 } },
+	// MIPI_DCS_SET_BRIGHTNESS 0000: 0%. 07FF: 100%.
+	{ MIPI_DCS_SET_DISPLAY_BRIGHTNESS, 2, { 0x00, 0x00 } },
 
 	{
 		0xFF,
 		5,
 	},
+	{ MIPI_DCS_SET_DISPLAY_ON, 0, { 0x00 } },
+	{
+		0xFF,
+		20,
+	},
+	{ MIPI_DCS_NOP, -1, { 0x00 } },
 };
 
 struct init_cmd init_cmds_PANEL_AUO_A062TAN01[] = {
@@ -236,6 +248,7 @@ struct init_cmd init_cmds_PANEL_AUO_A062TAN01[] = {
 		5,
 	},
 	{ MIPI_DCS_PRIV_SET_POWER_CONTROL, 6, { 0x48, 0x11, 0x71, 0x09, 0x32, 0x14 } },
+	{ MIPI_DCS_NOP, -1, { 0x00 } },
 };
 
 struct init_cmd suspend_cmds_PANEL_AUO_A062TAN01[] = {
@@ -252,6 +265,7 @@ struct init_cmd suspend_cmds_PANEL_AUO_A062TAN01[] = {
 		0xFF,
 		50,
 	},
+	{ MIPI_DCS_NOP, -1, { 0x00 } },
 };
 
 struct init_cmd suspend_cmds_PANEL_AUO_A055TAN01[] = {
@@ -274,6 +288,7 @@ struct init_cmd suspend_cmds_PANEL_AUO_A055TAN01[] = {
 		0xFF,
 		50,
 	},
+	{ MIPI_DCS_NOP, -1, { 0x00 } },
 };
 
 struct init_cmd init_cmds_PANEL_INL_P062CCA_AZ1[] = {
@@ -289,6 +304,7 @@ struct init_cmd init_cmds_PANEL_INL_P062CCA_AZ1[] = {
 	},
 	{ MIPI_DCS_PRIV_SET_POWER_CONTROL, 6, { 0x48, 0x15, 0x75, 0x09, 0x32, 0x14 } },
 
+	{ MIPI_DCS_NOP, -1, { 0x00 } },
 };
 
 struct init_cmd suspend_cmds_PANEL_INL_2J055IA_27A[] = {
@@ -311,6 +327,7 @@ struct init_cmd suspend_cmds_PANEL_INL_2J055IA_27A[] = {
 		0xFF,
 		50,
 	},
+	{ MIPI_DCS_NOP, -1, { 0x00 } },
 };
 
 struct init_cmd suspend_cmds_PANEL_SHP_LQ055T1SW10[] = {
@@ -333,18 +350,21 @@ struct init_cmd suspend_cmds_PANEL_SHP_LQ055T1SW10[] = {
 		0xFF,
 		50,
 	},
+	{ MIPI_DCS_NOP, -1, { 0x00 } },
 };
 
 struct init_cmd suspend_cmds_PANEL_SAM_AMS699VC01[] = {
+	{ MIPI_DCS_SET_DISPLAY_OFF, 0, { 0x00 } },
 	{
 		0xFF,
 		100,
 	},
-	{ MIPI_DCS_ENTER_SLEEP_MODE, 2, { 0x00, 0x0 } },
+	{ MIPI_DCS_ENTER_SLEEP_MODE, 0, { 0x00 } },
 	{
 		0xFF,
 		120,
 	},
+	{ MIPI_DCS_NOP, -1, { 0x00 } },
 };
 
 static inline struct nx_panel *to_nx_panel(struct drm_panel *panel)
@@ -352,22 +372,42 @@ static inline struct nx_panel *to_nx_panel(struct drm_panel *panel)
 	return container_of(panel, struct nx_panel, base);
 }
 
+static u16 nx_dcs_brightness(struct backlight_device *bl)
+{
+	if (backlight_is_blank(bl))
+		return 0;
+
+	if (bl->props.brightness >= DCS_SM_DUTY_MAX)
+		return DCS_SM_BRIGHTNESS_MAX;
+
+	return max(bl->props.brightness, 1) *
+	       (DCS_SM_BRIGHTNESS_MAX / DCS_SM_DUTY_MAX);
+}
+
 static void nx_panel_detect(struct nx_panel *nx)
 {
+	u8 id[3] = { 0 };
 	int ret;
 	nx->init_cmds = NULL;
 	nx->suspend_cmds = NULL;
 
-	memset(&(nx->display_id), 0, sizeof(nx->display_id));
+	nx->display_id = 0;
 
 	ret = mipi_dsi_dcs_read(nx->dsi, MIPI_DCS_GET_DISPLAY_ID,
-				&(nx->display_id), sizeof(nx->display_id));
+				id, sizeof(id));
 	if (ret < 0) {
 		dev_err(&nx->dsi->dev, "failed to read panel ID: %d\n", ret);
 	} else {
-		dev_info(&nx->dsi->dev, "display ID[%d]: %04x\n",
-			 ret, nx->display_id);
+		nx->display_id = (id[2] << 8) | id[0];
+		dev_info_once(&nx->dsi->dev, "display ID[%d]: %02x %02x %02x\n",
+			      ret, id[0], id[1], id[2]);
 	}
+
+	if ((nx->display_id & 0xFF) == PANEL_JDI_XXX062M)
+		nx->display_id = PANEL_JDI_XXX062M;
+
+	if (of_machine_is_compatible("nintendo,aula"))
+		nx->display_id = PANEL_SAM_AMS699VC01;
 
 	dev_info(&nx->dsi->dev,
 		 "setting init sequence for ID %04x\n", nx->display_id);
@@ -493,6 +533,21 @@ static int nx_panel_init(struct nx_panel *nx)
 		return ret;
 	}
 
+	if (nx->dcs_backlight) {
+		u8 mode;
+
+		ret = mipi_dsi_dcs_set_display_brightness_large(dsi,
+								nx_dcs_brightness(nx->backlight));
+		if (ret < 0) {
+			dev_err(dev, "failed to set brightness: %d\n", ret);
+			return ret;
+		}
+
+		ret = mipi_dsi_dcs_get_power_mode(dsi, &mode);
+		if (ret < 0)
+			dev_warn(dev, "failed to read power mode: %d\n", ret);
+	}
+
 	return 0;
 }
 
@@ -518,6 +573,9 @@ static int nx_panel_disable(struct drm_panel *panel)
 		return 0;
 
 	backlight_disable(nx->backlight);
+
+	if (nx->dcs_backlight)
+		mipi_dsi_dcs_set_display_off(nx->dsi);
 
 	nx->enabled = false;
 
@@ -655,6 +713,21 @@ static const struct drm_panel_funcs nx_panel_funcs = {
 	.get_orientation = nx_panel_get_orientation,
 };
 
+static int nx_dcs_backlight_update_status(struct backlight_device *bl)
+{
+	struct nx_panel *nx = bl_get_data(bl);
+
+	if (!nx->prepared)
+		return 0;
+
+	return mipi_dsi_dcs_set_display_brightness_large(nx->dsi,
+							 nx_dcs_brightness(bl));
+}
+
+static const struct backlight_ops nx_dcs_backlight_ops = {
+	.update_status = nx_dcs_backlight_update_status,
+};
+
 static int nx_panel_add(struct nx_panel *nx)
 {
 	struct device *dev = &nx->dsi->dev;
@@ -689,6 +762,20 @@ static int nx_panel_add(struct nx_panel *nx)
 
 		if (!nx->backlight)
 			return -EPROBE_DEFER;
+	} else {
+		struct backlight_properties props = {
+			.type = BACKLIGHT_RAW,
+			.brightness = DCS_SM_DUTY_DEFAULT,
+			.max_brightness = DCS_SM_DUTY_MAX,
+		};
+
+		nx->backlight = devm_backlight_device_register(dev, "backlight", dev, nx,
+							       &nx_dcs_backlight_ops,
+							       &props);
+		if (IS_ERR(nx->backlight))
+			return PTR_ERR(nx->backlight);
+
+		nx->dcs_backlight = true;
 	}
 
 	ret = of_drm_get_panel_orientation(dev->of_node, &nx->orientation);
@@ -710,7 +797,7 @@ static void nx_panel_del(struct nx_panel *nx)
 	if (nx->base.dev)
 		drm_panel_remove(&nx->base);
 
-	if (nx->backlight)
+	if (nx->backlight && !nx->dcs_backlight)
 		put_device(&nx->backlight->dev);
 }
 
