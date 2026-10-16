@@ -25,6 +25,7 @@
 #include <drm/drm_panel.h>
 #include <drm/drm_print.h>
 #include <drm/drm_simple_kms_helper.h>
+#include <drm/drm_vblank.h>
 
 #include "dc.h"
 #include "drm.h"
@@ -1342,6 +1343,39 @@ static void tegra_dsi_writesl(struct tegra_dsi *dsi, unsigned long offset,
 	}
 }
 
+static ssize_t tegra_dsi_video_transfer(struct tegra_dsi *dsi,
+					const struct mipi_dsi_packet *packet)
+{
+	const u8 *header = packet->header;
+	u32 host_control, value;
+
+	host_control = tegra_dsi_readl(dsi, DSI_HOST_CONTROL);
+
+	value = DSI_HOST_CONTROL_HS | DSI_HOST_CONTROL_TX_TRIG_SOL |
+		DSI_HOST_CONTROL_CS | DSI_HOST_CONTROL_ECC;
+	tegra_dsi_writel(dsi, value, DSI_HOST_CONTROL);
+
+	value = DSI_VIDEO_MODE_CMD_PKT_ENABLE | DSI_VIDEO_MODE_LINE_TYPE(4);
+	tegra_dsi_writel(dsi, value, DSI_VIDEO_MODE_CONTROL);
+
+	value = header[2] << 16 | header[1] << 8 | header[0];
+	tegra_dsi_writel(dsi, value, DSI_WR_DATA);
+
+	if (packet->payload_length > 0)
+		tegra_dsi_writesl(dsi, DSI_WR_DATA, packet->payload,
+				  packet->payload_length);
+
+	if (dsi->output.encoder.crtc) {
+		drm_crtc_wait_one_vblank(dsi->output.encoder.crtc);
+		drm_crtc_wait_one_vblank(dsi->output.encoder.crtc);
+	}
+
+	tegra_dsi_writel(dsi, 0, DSI_VIDEO_MODE_CONTROL);
+	tegra_dsi_writel(dsi, host_control, DSI_HOST_CONTROL);
+
+	return packet->size;
+}
+
 static ssize_t tegra_dsi_host_transfer(struct mipi_dsi_host *host,
 				       const struct mipi_dsi_msg *msg)
 {
@@ -1361,6 +1395,13 @@ static ssize_t tegra_dsi_host_transfer(struct mipi_dsi_host *host,
 	/* maximum FIFO depth is 1920 words */
 	if (packet.size > dsi->video_fifo_depth * 4)
 		return -ENOSPC;
+
+	if (tegra_dsi_readl(dsi, DSI_CONTROL) & DSI_CONTROL_VIDEO_ENABLE) {
+		if (msg->rx_buf && msg->rx_len > 0)
+			return -EBUSY;
+
+		return tegra_dsi_video_transfer(dsi, &packet);
+	}
 
 	tegra_dsi_writel(dsi, DSI_HOST_CONTROL_FIFO_RESET, DSI_HOST_CONTROL);
 	usleep_range(10, 20);

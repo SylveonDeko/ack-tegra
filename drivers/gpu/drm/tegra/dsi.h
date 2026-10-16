@@ -102,6 +102,8 @@
 #define DSI_PAD_CONTROL_CD		0x4c
 #define DSI_PAD_CD_STATUS		0x4d
 #define DSI_VIDEO_MODE_CONTROL		0x4e
+#define DSI_VIDEO_MODE_CMD_PKT_ENABLE	(1 << 0)
+#define DSI_VIDEO_MODE_LINE_TYPE(x)	(((x) & 0x7) << 1)
 #define DSI_PAD_CONTROL_1		0x4f
 #define DSI_PAD_CONTROL_2		0x50
 #define DSI_PAD_OUT_CLK(x)		(((x) & 0x7) <<  0)
