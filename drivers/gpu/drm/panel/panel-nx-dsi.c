@@ -607,7 +607,7 @@ static const struct drm_display_mode default_mode = {
 	.htotal = 720 + 136 + 72 + 72,
 	.vdisplay = 1280,
 	.vsync_start = 1280 + 10,
-	.vsync_end = 1280 + 10 + 2,
+	.vsync_end = 1280 + 10 + 1,
 	.vtotal = 1280 + 10 + 1 + 9,
 	.flags = 0,
 };
