@@ -961,7 +961,9 @@ static void bm92t_port_set_init_state(struct work_struct *work)
 		"port is set to init state\n");
 
 	msleep(100); /* Wait a bit */
-	queue_work(info->event_wq, &info->work);
+	disable_irq(info->i2c_client->irq);
+	if (!queue_work(info->event_wq, &info->work))
+		enable_irq(info->i2c_client->irq);
 }
 
 static bool bm92t_check_pdo(struct bm92t_info *info)
@@ -1883,6 +1885,8 @@ ret:
 		bm92t_read_reg(info, UNKOWN_1C_REG, (void *)&dp, sizeof(dp));
 		bm92t_read_reg(info, UNKOWN_1D_REG, (void *)&dp, sizeof(dp));
 	}
+
+	enable_irq(info->i2c_client->irq);
 }
 
 static irqreturn_t bm92t_interrupt_handler(int irq, void *handle)
@@ -1890,7 +1894,8 @@ static irqreturn_t bm92t_interrupt_handler(int irq, void *handle)
 	struct bm92t_info *info = handle;
 
 	disable_irq_nosync(info->i2c_client->irq);
-	queue_work(info->event_wq, &info->work);
+	if (!queue_work(info->event_wq, &info->work))
+		enable_irq(info->i2c_client->irq);
 	return IRQ_HANDLED;
 }
 
@@ -2517,11 +2522,8 @@ static int bm92t_probe(struct i2c_client *client)
 	if (client->irq > 0) {
 		/*
 		 * Level-triggered (active-low) IRQ wired to BM92T36 ALERT.
-		 * Use a threaded handler with IRQF_ONESHOT so the line is
-		 * masked while bm92t_interrupt_handler runs i2c reads, then
-		 * re-enabled after the work clears the controller's status.
-		 * Without IRQF_ONESHOT this would re-enter immediately on
-		 * the still-asserted line and "irq nobody cared" disable it.
+		 * The IRQ stays disabled while the event work runs i2c reads
+		 * and is re-enabled once the controller's status is cleared.
 		 */
 		if (request_threaded_irq(client->irq, NULL,
 				bm92t_interrupt_handler,
