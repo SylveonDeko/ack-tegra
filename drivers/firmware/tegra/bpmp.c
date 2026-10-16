@@ -13,6 +13,7 @@
 #include <linux/pm.h>
 #include <linux/semaphore.h>
 #include <linux/sched/clock.h>
+#include <linux/syscore_ops.h>
 
 #include <soc/tegra/bpmp.h>
 #include <soc/tegra/bpmp-abi.h>
@@ -343,27 +344,11 @@ static ssize_t tegra_bpmp_channel_write(struct tegra_bpmp_channel *channel,
 
 static int __maybe_unused tegra_bpmp_resume(struct device *dev);
 
-int tegra_bpmp_transfer_atomic(struct tegra_bpmp *bpmp,
-			       struct tegra_bpmp_message *msg)
+static int __tegra_bpmp_transfer_atomic(struct tegra_bpmp *bpmp,
+					struct tegra_bpmp_message *msg)
 {
-	struct tegra_bpmp_channel *channel;
+	struct tegra_bpmp_channel *channel = bpmp->tx_channel;
 	int err;
-
-	if (WARN_ON(!irqs_disabled()))
-		return -EPERM;
-
-	if (!tegra_bpmp_message_valid(msg))
-		return -EINVAL;
-
-	if (bpmp->suspended) {
-		/* Reset BPMP IPC channels during resume based on flags passed */
-		if (msg->flags & TEGRA_BPMP_MESSAGE_RESET)
-			tegra_bpmp_resume(bpmp->dev);
-		else
-			return -EAGAIN;
-	}
-
-	channel = bpmp->tx_channel;
 
 	spin_lock(&bpmp->atomic_tx_lock);
 
@@ -386,6 +371,26 @@ int tegra_bpmp_transfer_atomic(struct tegra_bpmp *bpmp,
 
 	return __tegra_bpmp_channel_read(channel, msg->rx.data, msg->rx.size,
 					 &msg->rx.ret);
+}
+
+int tegra_bpmp_transfer_atomic(struct tegra_bpmp *bpmp,
+			       struct tegra_bpmp_message *msg)
+{
+	if (WARN_ON(!irqs_disabled()))
+		return -EPERM;
+
+	if (!tegra_bpmp_message_valid(msg))
+		return -EINVAL;
+
+	if (bpmp->suspended) {
+		/* Reset BPMP IPC channels during resume based on flags passed */
+		if (msg->flags & TEGRA_BPMP_MESSAGE_RESET)
+			tegra_bpmp_resume(bpmp->dev);
+		else
+			return -EAGAIN;
+	}
+
+	return __tegra_bpmp_transfer_atomic(bpmp, msg);
 }
 EXPORT_SYMBOL_GPL(tegra_bpmp_transfer_atomic);
 
@@ -733,6 +738,37 @@ void tegra_bpmp_handle_rx(struct tegra_bpmp *bpmp)
 	spin_unlock(&bpmp->lock);
 }
 
+#define MRQ_T210_ENABLE_SUSPEND	17
+#define TEGRA210_BPMP_PM_SC7	23
+
+static int tegra210_bpmp_syscore_suspend(void *data)
+{
+	struct tegra_bpmp *bpmp = data;
+	__le32 req[2] = { cpu_to_le32(TEGRA210_BPMP_PM_SC7), 0 };
+	struct tegra_bpmp_message msg = {
+		.mrq = MRQ_T210_ENABLE_SUSPEND,
+		.tx = {
+			.data = req,
+			.size = sizeof(req),
+		},
+	};
+	int err;
+
+	err = __tegra_bpmp_transfer_atomic(bpmp, &msg);
+	if (err < 0)
+		dev_err(bpmp->dev, "failed to enable SC7: %d\n", err);
+
+	return 0;
+}
+
+static const struct syscore_ops tegra210_bpmp_syscore_ops = {
+	.suspend = tegra210_bpmp_syscore_suspend,
+};
+
+static struct syscore tegra210_bpmp_syscore = {
+	.ops = &tegra210_bpmp_syscore_ops,
+};
+
 static int tegra_bpmp_probe(struct platform_device *pdev)
 {
 	struct tegra_bpmp *bpmp;
@@ -830,6 +866,11 @@ static int tegra_bpmp_probe(struct platform_device *pdev)
 	err = tegra_bpmp_init_debugfs(bpmp);
 	if (err < 0)
 		dev_err(&pdev->dev, "debugfs initialization failed: %d\n", err);
+
+	if (of_device_is_compatible(pdev->dev.of_node, "nvidia,tegra210-bpmp")) {
+		tegra210_bpmp_syscore.data = bpmp;
+		register_syscore(&tegra210_bpmp_syscore);
+	}
 
 	return 0;
 
