@@ -2151,7 +2151,7 @@ static ssize_t bm92t_cmd_write(struct file *file,
 
 	ret = kstrtouint(buf, 0, &val);
 
-	if (ret == 1) {
+	if (!ret) {
 		cmd = val;
 		bm92t_send_cmd(info, &cmd);
 	} else {
@@ -2183,7 +2183,7 @@ static ssize_t bm92t_usbhub_dp_sleep_write(struct file *file,
 
 	ret = kstrtouint(buf, 0, &val);
 
-	if (ret == 1) {
+	if (!ret) {
 		bm92t_usbhub_dp_sleep(info, val ? true : false);
 	} else {
 		dev_err(&info->i2c_client->dev, "Syntax is: 0 or number\n");
