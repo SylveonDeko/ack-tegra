@@ -1362,13 +1362,8 @@ static ssize_t tegra_dsi_host_transfer(struct mipi_dsi_host *host,
 	if (packet.size > dsi->video_fifo_depth * 4)
 		return -ENOSPC;
 
-	/* reset underflow/overflow flags */
-	value = tegra_dsi_readl(dsi, DSI_STATUS);
-	if (value & (DSI_STATUS_UNDERFLOW | DSI_STATUS_OVERFLOW)) {
-		value = DSI_HOST_CONTROL_FIFO_RESET;
-		tegra_dsi_writel(dsi, value, DSI_HOST_CONTROL);
-		usleep_range(10, 20);
-	}
+	tegra_dsi_writel(dsi, DSI_HOST_CONTROL_FIFO_RESET, DSI_HOST_CONTROL);
+	usleep_range(10, 20);
 
 	value = tegra_dsi_readl(dsi, DSI_POWER_CONTROL);
 	value |= DSI_POWER_CONTROL_ENABLE;
