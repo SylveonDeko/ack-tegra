@@ -939,6 +939,85 @@ int tegra_drm_unregister_client(struct tegra_drm *tegra,
 	return 0;
 }
 
+struct tegra_drm_direct_region {
+	struct list_head list;
+	struct drm_mm_node node;
+	dma_addr_t start;
+	size_t size;
+};
+
+static int tegra_drm_map_direct_regions(struct device *dev, void *data)
+{
+	struct tegra_drm *tegra = data;
+	struct tegra_drm_direct_region *direct;
+	struct iommu_resv_region *region;
+	LIST_HEAD(regions);
+	int err = 0;
+
+	iommu_get_resv_regions(dev, &regions);
+
+	list_for_each_entry(region, &regions, list) {
+		if (region->type != IOMMU_RESV_DIRECT)
+			continue;
+
+		direct = kzalloc_obj(*direct);
+		if (!direct) {
+			err = -ENOMEM;
+			break;
+		}
+
+		err = iommu_map(tegra->domain, region->start, region->start,
+				region->length, region->prot, GFP_KERNEL);
+		if (err < 0) {
+			dev_err(dev, "failed to map %pa+%zx: %d\n",
+				&region->start, region->length, err);
+			kfree(direct);
+			break;
+		}
+
+		direct->start = region->start;
+		direct->size = region->length;
+		list_add_tail(&direct->list, &tegra->direct_regions);
+	}
+
+	iommu_put_resv_regions(dev, &regions);
+
+	return err;
+}
+
+static void tegra_drm_reserve_direct_regions(struct tegra_drm *tegra)
+{
+	struct tegra_drm_direct_region *direct;
+	unsigned long shift = tegra->carveout.shift;
+	int err;
+
+	list_for_each_entry(direct, &tegra->direct_regions, list) {
+		direct->node.start = direct->start;
+		direct->node.size = direct->size;
+
+		err = drm_mm_reserve_node(&tegra->mm, &direct->node);
+		if (err < 0 && err != -ENOSPC)
+			dev_warn(tegra->drm->dev, "failed to reserve %pad+%zx: %d\n",
+				 &direct->start, direct->size, err);
+
+		reserve_iova(&tegra->carveout.domain, direct->start >> shift,
+			     (direct->start + direct->size - 1) >> shift);
+	}
+}
+
+static void tegra_drm_release_direct_regions(struct tegra_drm *tegra)
+{
+	struct tegra_drm_direct_region *direct, *tmp;
+
+	list_for_each_entry_safe(direct, tmp, &tegra->direct_regions, list) {
+		if (drm_mm_node_allocated(&direct->node))
+			drm_mm_remove_node(&direct->node);
+
+		list_del(&direct->list);
+		kfree(direct);
+	}
+}
+
 int host1x_client_iommu_attach(struct host1x_client *client)
 {
 	struct iommu_domain *domain = iommu_get_domain_for_dev(client->dev);
@@ -973,6 +1052,13 @@ int host1x_client_iommu_attach(struct host1x_client *client)
 			return -ENODEV;
 
 		if (domain != tegra->domain) {
+			err = iommu_group_for_each_dev(group, tegra,
+						       tegra_drm_map_direct_regions);
+			if (err < 0) {
+				iommu_group_put(group);
+				return err;
+			}
+
 			err = iommu_attach_group(tegra->domain, group);
 			if (err < 0) {
 				iommu_group_put(group);
@@ -1167,6 +1253,7 @@ static int host1x_drm_probe(struct host1x_device *dev)
 
 	mutex_init(&tegra->clients_lock);
 	INIT_LIST_HEAD(&tegra->clients);
+	INIT_LIST_HEAD(&tegra->direct_regions);
 
 	dev_set_drvdata(&dev->dev, drm);
 	drm->dev_private = tegra;
@@ -1222,11 +1309,14 @@ static int host1x_drm_probe(struct host1x_device *dev)
 		drm_mm_init(&tegra->mm, gem_start, gem_end - gem_start + 1);
 		mutex_init(&tegra->mm_lock);
 
+		tegra_drm_reserve_direct_regions(tegra);
+
 		DRM_DEBUG_DRIVER("IOMMU apertures:\n");
 		DRM_DEBUG_DRIVER("  GEM: %#llx-%#llx\n", gem_start, gem_end);
 		DRM_DEBUG_DRIVER("  Carveout: %#llx-%#llx\n", carveout_start,
 				 carveout_end);
 	} else if (tegra->domain) {
+		tegra_drm_release_direct_regions(tegra);
 		iommu_domain_free(tegra->domain);
 		tegra->domain = NULL;
 		iova_cache_put();
@@ -1282,6 +1372,7 @@ hub:
 device:
 	if (tegra->domain) {
 		mutex_destroy(&tegra->mm_lock);
+		tegra_drm_release_direct_regions(tegra);
 		drm_mm_takedown(&tegra->mm);
 		put_iova_domain(&tegra->carveout.domain);
 		iova_cache_put();
@@ -1292,8 +1383,10 @@ poll:
 	drm_kms_helper_poll_fini(drm);
 	drm_mode_config_cleanup(drm);
 domain:
-	if (tegra->domain)
+	if (tegra->domain) {
+		tegra_drm_release_direct_regions(tegra);
 		iommu_domain_free(tegra->domain);
+	}
 free:
 	kfree(tegra);
 put:
@@ -1322,6 +1415,7 @@ static void host1x_drm_remove(struct host1x_device *dev)
 
 	if (tegra->domain) {
 		mutex_destroy(&tegra->mm_lock);
+		tegra_drm_release_direct_regions(tegra);
 		drm_mm_takedown(&tegra->mm);
 		put_iova_domain(&tegra->carveout.domain);
 		iova_cache_put();

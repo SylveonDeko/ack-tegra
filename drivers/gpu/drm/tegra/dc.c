@@ -2254,6 +2254,51 @@ static void tegra_crtc_atomic_disable(struct drm_crtc *crtc,
 	}
 }
 
+static void tegra_dc_end_handoff(struct tegra_dc *dc)
+{
+	struct drm_encoder *encoder;
+
+	if (!dc->handoff)
+		return;
+
+	drm_for_each_encoder_mask(encoder, dc->base.dev,
+				  dc->base.state->encoder_mask) {
+		struct tegra_output *output = encoder_to_output(encoder);
+
+		if (output->end_handoff)
+			output->end_handoff(output);
+	}
+
+	dc->handoff = false;
+	host1x_client_suspend(&dc->client);
+}
+
+static void tegra_dc_take_over(struct tegra_dc *dc,
+			       struct tegra_dc_state *state)
+{
+	struct drm_plane *plane;
+
+	if (!dc->handoff)
+		return;
+
+	drm_for_each_plane(plane, dc->base.dev) {
+		struct tegra_plane *p = to_tegra_plane(plane);
+		u32 value;
+
+		if (p->dc != dc || plane->type == DRM_PLANE_TYPE_CURSOR)
+			continue;
+
+		value = tegra_plane_readl(p, DC_WIN_WIN_OPTIONS);
+		value &= ~WIN_ENABLE;
+		tegra_plane_writel(p, value, DC_WIN_WIN_OPTIONS);
+
+		state->planes |= WIN_A_ACT_REQ << p->index;
+	}
+
+	dc->handoff = false;
+	host1x_client_suspend(&dc->client);
+}
+
 static void tegra_crtc_atomic_enable(struct drm_crtc *crtc,
 				     struct drm_atomic_state *state)
 {
@@ -2271,6 +2316,8 @@ static void tegra_crtc_atomic_enable(struct drm_crtc *crtc,
 		dev_err(dc->dev, "failed to resume: %d\n", err);
 		return;
 	}
+
+	tegra_dc_take_over(dc, crtc_state);
 
 	/* initialize display controller */
 	if (dc->syncpt) {
@@ -2309,6 +2356,8 @@ static void tegra_crtc_atomic_enable(struct drm_crtc *crtc,
 
 		tegra_dc_writel(dc, READ_MUX, DC_CMD_STATE_ACCESS);
 	} else {
+		tegra_dc_writel(dc, 0, DC_CMD_REG_ACT_CONTROL);
+
 		value = WIN_A_UF_INT | WIN_B_UF_INT | WIN_C_UF_INT |
 			WIN_A_OF_INT | WIN_B_OF_INT | WIN_C_OF_INT;
 		tegra_dc_writel(dc, value, DC_CMD_INT_TYPE);
@@ -2716,6 +2765,12 @@ static int tegra_dc_init(struct host1x_client *client)
 	struct drm_plane *cursor = NULL;
 	int err;
 
+	if (dc->inherited) {
+		tegra_dc_writel(dc, 0, DC_CMD_CONT_SYNCPT_VSYNC);
+		tegra_dc_writel(dc, 0, DC_CMD_INT_ENABLE);
+		tegra_dc_writel(dc, 0, DC_CMD_INT_MASK);
+	}
+
 	/*
 	 * DC has been reset by now, so VBLANK syncpoint can be released
 	 * for general use.
@@ -2747,6 +2802,14 @@ static int tegra_dc_init(struct host1x_client *client)
 	if (err < 0 && err != -ENODEV) {
 		dev_err(client->dev, "failed to attach to domain: %d\n", err);
 		return err;
+	}
+
+	if (dc->inherited) {
+		err = host1x_client_resume(client);
+		if (err < 0)
+			dev_warn(dc->dev, "failed to keep inherited display: %d\n", err);
+		else
+			dc->handoff = true;
 	}
 
 	if (dc->soc->wgrps)
@@ -2840,6 +2903,8 @@ static int tegra_dc_exit(struct host1x_client *client)
 	/* avoid a dangling pointer just in case this disappears */
 	client->dev->dma_parms = NULL;
 
+	tegra_dc_end_handoff(dc);
+
 	devm_free_irq(dc->dev, dc->irq, dc);
 
 	err = tegra_dc_rgb_exit(dc);
@@ -2862,6 +2927,24 @@ static int tegra_dc_late_exit(struct host1x_client *client)
 	tegra->num_crtcs--;
 
 	return 0;
+}
+
+static bool tegra_dc_is_active(struct tegra_dc *dc)
+{
+	if (!of_property_present(dc->dev->of_node, "memory-region"))
+		return false;
+
+	if (reset_control_status(dc->rst) != 0)
+		return false;
+
+	return tegra_dc_readl(dc, DC_CMD_DISPLAY_COMMAND) & DISP_CTRL_MODE_MASK;
+}
+
+static void tegra_dc_release_inherited(void *data)
+{
+	struct tegra_dc *dc = data;
+
+	clk_disable_unprepare(dc->clk);
 }
 
 static int tegra_dc_runtime_suspend(struct host1x_client *client)
@@ -2895,6 +2978,12 @@ static int tegra_dc_runtime_resume(struct host1x_client *client)
 	if (err < 0) {
 		dev_err(dev, "failed to get runtime PM: %d\n", err);
 		return err;
+	}
+
+	if (dc->inherited) {
+		devm_remove_action(dev, tegra_dc_release_inherited, dc);
+		dc->inherited = false;
+		return 0;
 	}
 
 	if (dc->soc->has_powergate) {
@@ -3310,39 +3399,50 @@ static int tegra_dc_probe(struct platform_device *pdev)
 		return PTR_ERR(dc->rst);
 	}
 
-	/* assert reset and disable clock */
-	err = clk_prepare_enable(dc->clk);
-	if (err < 0)
-		return err;
-
-	usleep_range(2000, 4000);
-
-	err = reset_control_assert(dc->rst);
-	if (err < 0) {
-		clk_disable_unprepare(dc->clk);
-		return err;
-	}
-
-	usleep_range(2000, 4000);
-
-	clk_disable_unprepare(dc->clk);
+	dc->regs = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(dc->regs))
+		return PTR_ERR(dc->regs);
 
 	if (dc->soc->has_powergate) {
 		if (dc->pipe == 0)
 			dc->powergate = TEGRA_POWERGATE_DIS;
 		else
 			dc->powergate = TEGRA_POWERGATE_DISB;
+	}
 
-		tegra_powergate_power_off(dc->powergate);
+	err = clk_prepare_enable(dc->clk);
+	if (err < 0)
+		return err;
+
+	if (tegra_dc_is_active(dc)) {
+		dc->inherited = true;
+		dev_dbg(&pdev->dev, "keeping display set up by the bootloader\n");
+
+		err = devm_add_action_or_reset(&pdev->dev,
+					       tegra_dc_release_inherited, dc);
+		if (err < 0)
+			return err;
+	} else {
+		/* assert reset and disable clock */
+		usleep_range(2000, 4000);
+
+		err = reset_control_assert(dc->rst);
+		if (err < 0) {
+			clk_disable_unprepare(dc->clk);
+			return err;
+		}
+
+		usleep_range(2000, 4000);
+
+		clk_disable_unprepare(dc->clk);
+
+		if (dc->soc->has_powergate)
+			tegra_powergate_power_off(dc->powergate);
 	}
 
 	err = tegra_dc_init_opp_table(dc);
 	if (err < 0)
 		return err;
-
-	dc->regs = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(dc->regs))
-		return PTR_ERR(dc->regs);
 
 	dc->irq = platform_get_irq(pdev, 0);
 	if (dc->irq < 0)

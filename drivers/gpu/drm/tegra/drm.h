@@ -38,6 +38,7 @@ struct tegra_drm {
 	bool use_explicit_iommu;
 	struct mutex mm_lock;
 	struct drm_mm mm;
+	struct list_head direct_regions;
 
 	struct {
 		struct iova_domain domain;
@@ -153,6 +154,8 @@ struct tegra_output {
 	struct cec_notifier *cec;
 	unsigned int hpd_irq;
 	struct gpio_desc *hpd_gpio;
+
+	void (*end_handoff)(struct tegra_output *output);
 
 	struct drm_encoder encoder;
 	struct drm_connector connector;

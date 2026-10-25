@@ -96,6 +96,8 @@ struct tegra_dsi {
 	unsigned int video_fifo_depth;
 	unsigned int host_fifo_depth;
 
+	bool handoff;
+
 	/* for ganged-mode support */
 	struct tegra_dsi *master;
 	struct tegra_dsi *slave;
@@ -926,6 +928,84 @@ static int tegra_dsi_prepare(struct tegra_dsi *dsi)
 	return 0;
 }
 
+static bool tegra_dsi_is_active(struct tegra_dsi *dsi)
+{
+	bool active = false;
+
+	if (dsi->rst && reset_control_status(dsi->rst) != 0)
+		return false;
+
+	if (pm_runtime_resume_and_get(dsi->dev) < 0)
+		return false;
+
+	if (clk_prepare_enable(dsi->clk) == 0) {
+		active = tegra_dsi_readl(dsi, DSI_POWER_CONTROL) &
+			 DSI_POWER_CONTROL_ENABLE;
+		clk_disable_unprepare(dsi->clk);
+	}
+
+	pm_runtime_put(dsi->dev);
+
+	return active;
+}
+
+static void tegra_dsi_end_handoff(struct tegra_dsi *dsi)
+{
+	int err;
+
+	if (!dsi->handoff)
+		return;
+
+	if (dsi->output.panel)
+		drm_panel_disable(dsi->output.panel);
+
+	tegra_dsi_video_disable(dsi);
+
+	err = tegra_dsi_wait_idle(dsi, 100);
+	if (err < 0)
+		dev_dbg(dsi->dev, "failed to idle inherited link: %d\n", err);
+
+	tegra_dsi_soft_reset(dsi);
+
+	if (dsi->output.panel)
+		drm_panel_unprepare(dsi->output.panel);
+
+	tegra_dsi_disable(dsi);
+
+	dsi->handoff = false;
+	host1x_client_suspend(&dsi->client);
+}
+
+static void tegra_dsi_output_end_handoff(struct tegra_output *output)
+{
+	tegra_dsi_end_handoff(to_dsi(output));
+}
+
+static bool tegra_dsi_take_over(struct tegra_dsi *dsi)
+{
+	int err;
+
+	if (!dsi->handoff)
+		return false;
+
+	err = host1x_client_resume(&dsi->client);
+	if (err < 0) {
+		dev_err(dsi->dev, "failed to resume: %d\n", err);
+		tegra_dsi_end_handoff(dsi);
+		return false;
+	}
+
+	err = tegra_mipi_enable(dsi->mipi);
+	if (err < 0)
+		dev_err(dsi->dev, "failed to enable MIPI calibration: %d\n",
+			err);
+
+	dsi->handoff = false;
+	host1x_client_suspend(&dsi->client);
+
+	return true;
+}
+
 static void tegra_dsi_encoder_enable(struct drm_encoder *encoder)
 {
 	struct drm_display_mode *mode = &encoder->crtc->state->adjusted_mode;
@@ -935,6 +1015,9 @@ static void tegra_dsi_encoder_enable(struct drm_encoder *encoder)
 	struct tegra_dsi_state *state;
 	u32 value;
 	int err;
+
+	if (tegra_dsi_take_over(dsi))
+		return;
 
 	err = tegra_dsi_prepare(dsi);
 	if (err < 0) {
@@ -1716,10 +1799,25 @@ static int tegra_dsi_probe(struct platform_device *pdev)
 	dsi->client.ops = &dsi_client_ops;
 	dsi->client.dev = &pdev->dev;
 
-	err = host1x_client_register(&dsi->client);
+	host1x_client_init(&dsi->client);
+
+	if (tegra_dsi_is_active(dsi)) {
+		err = host1x_client_resume(&dsi->client);
+		if (err < 0) {
+			dev_warn(&pdev->dev, "failed to keep inherited link: %d\n", err);
+		} else {
+			dsi->handoff = true;
+			dsi->output.end_handoff = tegra_dsi_output_end_handoff;
+			dev_dbg(&pdev->dev, "keeping link set up by the bootloader\n");
+		}
+	}
+
+	err = __host1x_client_register(&dsi->client);
 	if (err < 0) {
 		dev_err(&pdev->dev, "failed to register host1x client: %d\n",
 			err);
+		tegra_dsi_end_handoff(dsi);
+		host1x_client_exit(&dsi->client);
 		goto unregister;
 	}
 
@@ -1738,6 +1836,8 @@ remove:
 static void tegra_dsi_remove(struct platform_device *pdev)
 {
 	struct tegra_dsi *dsi = platform_get_drvdata(pdev);
+
+	tegra_dsi_end_handoff(dsi);
 
 	pm_runtime_disable(&pdev->dev);
 

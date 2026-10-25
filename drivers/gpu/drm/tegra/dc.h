@@ -93,6 +93,9 @@ struct tegra_dc {
 	void __iomem *regs;
 	int irq;
 
+	bool inherited;
+	bool handoff;
+
 	struct tegra_output *rgb;
 
 	struct tegra_dc_stats stats;
