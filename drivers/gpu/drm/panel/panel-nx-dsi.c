@@ -610,6 +610,9 @@ static int nx_panel_unprepare(struct drm_panel *panel)
 	if (!nx->prepared)
 		return 0;
 
+	if (!nx->init_cmds)
+		nx_panel_detect(nx);
+
 	nx->dsi->mode_flags &= ~MIPI_DSI_MODE_LPM;
 
 	ret = nx_mipi_dsi_dcs_cmds(nx->suspend_cmds, nx);
@@ -830,6 +833,9 @@ static int nx_panel_add(struct nx_panel *nx)
 	nx->mode = &default_mode;
 	nx->color_mode = DCS_SM_COLOR_MODE_BASIC;
 
+	if (of_machine_is_compatible("nintendo,aula"))
+		nx->display_id = PANEL_SAM_AMS699VC01;
+
 	nx->supply1 = devm_regulator_get(dev, "vdd1");
 	if (IS_ERR(nx->supply1))
 		return PTR_ERR(nx->supply1);
@@ -838,16 +844,31 @@ static int nx_panel_add(struct nx_panel *nx)
 	if (IS_ERR(nx->supply2))
 		return PTR_ERR(nx->supply2);
 
-	nx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
+	nx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_ASIS);
 	if (IS_ERR(nx->reset_gpio)) {
 		dev_err(dev, "cannot get reset-gpios %ld\n",
 			PTR_ERR(nx->reset_gpio));
 		nx->reset_gpio = NULL;
-	} else {
-		gpiod_set_value(nx->reset_gpio, 0);
-	}
+	} else if (gpiod_get_value(nx->reset_gpio) > 0) {
+		gpiod_direction_output(nx->reset_gpio, 1);
 
-	usleep_range(2000, 4000);
+		ret = regulator_enable(nx->supply1);
+		if (ret < 0)
+			return ret;
+
+		ret = regulator_enable(nx->supply2);
+		if (ret < 0) {
+			regulator_disable(nx->supply1);
+			return ret;
+		}
+
+		nx->prepared = true;
+		nx->enabled = true;
+		dev_dbg(dev, "keeping panel running until the first modeset\n");
+	} else {
+		gpiod_direction_output(nx->reset_gpio, 0);
+		usleep_range(2000, 4000);
+	}
 
 	np = of_parse_phandle(dev->of_node, "backlight", 0);
 	if (np) {
@@ -880,6 +901,9 @@ static int nx_panel_add(struct nx_panel *nx)
 
 	drm_panel_init(&nx->base, &nx->dsi->dev, &nx_panel_funcs,
 		       DRM_MODE_CONNECTOR_DSI);
+
+	nx->base.prepared = nx->prepared;
+	nx->base.enabled = nx->enabled;
 
 	drm_panel_add(&nx->base);
 
