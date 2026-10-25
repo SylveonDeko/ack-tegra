@@ -637,6 +637,50 @@ static bool mmc_sd_use_tuning(struct mmc_card *card)
 	return false;
 }
 
+static int sd_set_ddr200(struct mmc_card *card, u8 *status)
+{
+	struct mmc_host *host = card->host;
+	int err;
+
+	if (!(host->caps2 & MMC_CAP2_SD_DDR200))
+		return -EOPNOTSUPP;
+
+	err = mmc_sd_switch(card, SD_SWITCH_CHECK, SD_SWITCH_GRP_CMD_SYSTEM,
+			    SD_SWITCH_CMD_SYSTEM_DDR200, status);
+	if (err || (status[16] >> 4) != SD_SWITCH_CMD_SYSTEM_DDR200)
+		return -EOPNOTSUPP;
+
+	err = mmc_sd_switch(card, SD_SWITCH_SET, SD_SWITCH_GRP_CMD_SYSTEM,
+			    SD_SWITCH_CMD_SYSTEM_DDR200, status);
+	if (err)
+		return err;
+
+	if ((status[16] >> 4) != SD_SWITCH_CMD_SYSTEM_DDR200)
+		return -EOPNOTSUPP;
+
+	mmc_set_timing(host, MMC_TIMING_UHS_DDR50);
+	mmc_set_clock(host, SD_DDR200_MAX_DTR);
+
+	err = mmc_execute_tuning(card);
+	if (!err) {
+		card->sw_caps.uhs_max_dtr = SD_DDR200_MAX_DTR;
+		pr_debug("%s: using DDR200 bus mode\n", mmc_hostname(host));
+		return 0;
+	}
+
+	pr_warn("%s: DDR200 tuning failed, using the default bus mode\n",
+		mmc_hostname(host));
+
+	mmc_set_clock(host, UHS_SDR12_MAX_DTR);
+
+	err = mmc_sd_switch(card, SD_SWITCH_SET, SD_SWITCH_GRP_CMD_SYSTEM,
+			    SD_SWITCH_CMD_SYSTEM_DEF, status);
+
+	mmc_set_timing(host, MMC_TIMING_UHS_SDR12);
+
+	return err ?: -EOPNOTSUPP;
+}
+
 /*
  * UHS-I specific initialization procedure
  */
@@ -673,6 +717,9 @@ static int mmc_sd_init_uhs_card(struct mmc_card *card)
 	/* Set current limit for the card */
 	err = sd_set_current_limit(card, status);
 	if (err)
+		goto out;
+
+	if (!sd_set_ddr200(card, status))
 		goto out;
 
 	/* Set bus speed mode of the card */

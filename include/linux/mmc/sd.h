@@ -88,6 +88,13 @@
  * SD_SWITCH function groups
  */
 #define SD_SWITCH_GRP_ACCESS	0
+#define SD_SWITCH_GRP_CMD_SYSTEM	1
+
+/*
+ * SD_SWITCH command system functions
+ */
+#define SD_SWITCH_CMD_SYSTEM_DEF	0
+#define SD_SWITCH_CMD_SYSTEM_DDR200	0xE
 
 /*
  * SD_SWITCH access modes
