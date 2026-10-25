@@ -207,6 +207,26 @@ static int ttyport_set_parity(struct serdev_controller *ctrl,
 	return 0;
 }
 
+static int ttyport_set_stop_bits(struct serdev_controller *ctrl,
+				 unsigned int stop_bits)
+{
+	struct serport *serport = serdev_controller_get_drvdata(ctrl);
+	struct tty_struct *tty = serport->tty;
+	struct ktermios ktermios = tty->termios;
+
+	if (stop_bits == 2)
+		ktermios.c_cflag |= CSTOPB;
+	else
+		ktermios.c_cflag &= ~CSTOPB;
+
+	tty_set_termios(tty, &ktermios);
+
+	if ((tty->termios.c_cflag & CSTOPB) != (ktermios.c_cflag & CSTOPB))
+		return -EINVAL;
+
+	return 0;
+}
+
 static void ttyport_wait_until_sent(struct serdev_controller *ctrl, long timeout)
 {
 	struct serport *serport = serdev_controller_get_drvdata(ctrl);
@@ -260,6 +280,7 @@ static const struct serdev_controller_ops ctrl_ops = {
 	.get_tiocm = ttyport_get_tiocm,
 	.set_tiocm = ttyport_set_tiocm,
 	.break_ctl = ttyport_break_ctl,
+	.set_stop_bits = ttyport_set_stop_bits,
 };
 
 struct device *serdev_tty_port_register(struct tty_port *port,

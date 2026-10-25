@@ -89,6 +89,7 @@ struct serdev_controller_ops {
 	int (*get_tiocm)(struct serdev_controller *);
 	int (*set_tiocm)(struct serdev_controller *, unsigned int, unsigned int);
 	int (*break_ctl)(struct serdev_controller *ctrl, unsigned int break_state);
+	int (*set_stop_bits)(struct serdev_controller *, unsigned int);
 };
 
 /**
@@ -292,6 +293,8 @@ static inline int serdev_device_set_rts(struct serdev_device *serdev, bool enabl
 		return serdev_device_set_tiocm(serdev, 0, TIOCM_RTS);
 }
 
+int serdev_device_set_stop_bits(struct serdev_device *serdev,
+				unsigned int stop_bits);
 int serdev_device_set_parity(struct serdev_device *serdev,
 			     enum serdev_parity parity);
 
