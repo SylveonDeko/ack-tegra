@@ -123,6 +123,7 @@ struct nx_panel {
 	struct init_cmd *suspend_cmds;
 
 	u16 display_id;
+	u8 color_mode;
 };
 
 struct init_cmd init_cmds_default[] = {
@@ -488,6 +489,17 @@ static int nx_mipi_dsi_dcs_cmds(struct init_cmd *cmds, struct nx_panel *nx)
 	return ret;
 }
 
+static bool nx_panel_has_color_modes(struct nx_panel *nx)
+{
+	return nx->display_id == PANEL_SAM_AMS699VC01;
+}
+
+static int nx_panel_write_color_mode(struct nx_panel *nx)
+{
+	return mipi_dsi_dcs_write(nx->dsi, MIPI_DCS_PRIV_SM_SET_COLOR_MODE,
+				  &nx->color_mode, sizeof(nx->color_mode));
+}
+
 static int nx_panel_init(struct nx_panel *nx)
 {
 	struct mipi_dsi_device *dsi = nx->dsi;
@@ -508,6 +520,14 @@ static int nx_panel_init(struct nx_panel *nx)
 	ret = nx_mipi_dsi_dcs_cmds(nx->init_cmds, nx);
 	if (ret < 0)
 		return ret;
+
+	if (nx_panel_has_color_modes(nx)) {
+		ret = nx_panel_write_color_mode(nx);
+		if (ret < 0) {
+			dev_err(dev, "failed to set color mode: %d\n", ret);
+			return ret;
+		}
+	}
 
 	ret = mipi_dsi_dcs_set_column_address(dsi, 0, nx->mode->hdisplay - 1);
 	if (ret < 0) {
@@ -728,6 +748,79 @@ static const struct backlight_ops nx_dcs_backlight_ops = {
 	.update_status = nx_dcs_backlight_update_status,
 };
 
+static const u8 nx_color_modes[] = {
+	DCS_SM_COLOR_MODE_BASIC,
+	DCS_SM_COLOR_MODE_WASHED,
+	DCS_SM_COLOR_MODE_NATURAL,
+	DCS_SM_COLOR_MODE_VIVID,
+	DCS_SM_COLOR_MODE_NIGHT0,
+	DCS_SM_COLOR_MODE_NIGHT1,
+	DCS_SM_COLOR_MODE_NIGHT2,
+	DCS_SM_COLOR_MODE_NIGHT3,
+};
+
+static ssize_t color_mode_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	struct nx_panel *nx = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "0x%02x\n", nx->color_mode);
+}
+
+static ssize_t color_mode_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct nx_panel *nx = dev_get_drvdata(dev);
+	unsigned int i;
+	u8 mode;
+	int ret;
+
+	ret = kstrtou8(buf, 0, &mode);
+	if (ret < 0)
+		return ret;
+
+	for (i = 0; i < ARRAY_SIZE(nx_color_modes); i++)
+		if (nx_color_modes[i] == mode)
+			break;
+
+	if (i == ARRAY_SIZE(nx_color_modes))
+		return -EINVAL;
+
+	nx->color_mode = mode;
+
+	if (nx->prepared) {
+		ret = nx_panel_write_color_mode(nx);
+		if (ret < 0)
+			return ret;
+	}
+
+	return count;
+}
+static DEVICE_ATTR_RW(color_mode);
+
+static struct attribute *nx_panel_attrs[] = {
+	&dev_attr_color_mode.attr,
+	NULL,
+};
+
+static umode_t nx_panel_attr_visible(struct kobject *kobj,
+				     struct attribute *attr, int n)
+{
+	struct nx_panel *nx = dev_get_drvdata(kobj_to_dev(kobj));
+
+	if (attr == &dev_attr_color_mode.attr && !nx_panel_has_color_modes(nx))
+		return 0;
+
+	return attr->mode;
+}
+
+static const struct attribute_group nx_panel_group = {
+	.attrs = nx_panel_attrs,
+	.is_visible = nx_panel_attr_visible,
+};
+__ATTRIBUTE_GROUPS(nx_panel);
+
 static int nx_panel_add(struct nx_panel *nx)
 {
 	struct device *dev = &nx->dsi->dev;
@@ -735,6 +828,7 @@ static int nx_panel_add(struct nx_panel *nx)
 	int ret;
 
 	nx->mode = &default_mode;
+	nx->color_mode = DCS_SM_COLOR_MODE_BASIC;
 
 	nx->supply1 = devm_regulator_get(dev, "vdd1");
 	if (IS_ERR(nx->supply1))
@@ -867,6 +961,7 @@ static struct mipi_dsi_driver nx_panel_driver = {
 	.driver = {
 		.name = "panel-nx-dsi",
 		.of_match_table = nx_panel_of_match,
+		.dev_groups = nx_panel_groups,
 	},
 	.probe = nx_panel_probe,
 	.remove = nx_panel_remove,
