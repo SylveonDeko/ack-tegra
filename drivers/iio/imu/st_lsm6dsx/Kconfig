@@ -21,6 +21,7 @@ config IIO_ST_LSM6DSX
 	  - lsm6ds3
 	  - lsm6ds3h
 	  - lsm6ds3tr-c
+	  - lsm6dse
 	  - lsm6dsl
 	  - lsm6dsm
 	  - lsm6dso

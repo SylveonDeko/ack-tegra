@@ -23,9 +23,11 @@ static const struct regmap_config st_lsm6dsx_spi_regmap_config = {
 
 static int st_lsm6dsx_spi_probe(struct spi_device *spi)
 {
-	const struct spi_device_id *id = spi_get_device_id(spi);
-	int hw_id = id->driver_data;
+	int hw_id = (uintptr_t)spi_get_device_match_data(spi);
 	struct regmap *regmap;
+
+	if (!hw_id)
+		return -ENODEV;
 
 	regmap = devm_regmap_init_spi(spi, &st_lsm6dsx_spi_regmap_config);
 	if (IS_ERR(regmap)) {
@@ -76,6 +78,10 @@ static const struct of_device_id st_lsm6dsx_spi_of_match[] = {
 	{
 		.compatible = "st,lsm6ds3tr-c",
 		.data = (void *)ST_LSM6DS3TRC_ID,
+	},
+	{
+		.compatible = "st,lsm6dse",
+		.data = (void *)ST_LSM6DSE_ID,
 	},
 	{
 		.compatible = "st,ism330dhcx",
@@ -148,6 +154,7 @@ static const struct spi_device_id st_lsm6dsx_spi_id_table[] = {
 	{ ST_LSM6DSOX_DEV_NAME, ST_LSM6DSOX_ID },
 	{ ST_LSM6DSR_DEV_NAME, ST_LSM6DSR_ID },
 	{ ST_LSM6DS3TRC_DEV_NAME, ST_LSM6DS3TRC_ID },
+	{ ST_LSM6DSE_DEV_NAME, ST_LSM6DSE_ID },
 	{ ST_ISM330DHCX_DEV_NAME, ST_ISM330DHCX_ID },
 	{ ST_LSM9DS1_DEV_NAME, ST_LSM9DS1_ID },
 	{ ST_LSM6DS0_DEV_NAME, ST_LSM6DS0_ID },

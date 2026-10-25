@@ -83,9 +83,11 @@
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/minmax.h>
+#include <linux/of.h>
 #include <linux/pm.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
+#include <linux/string.h>
 #include <linux/bitfield.h>
 
 #include <linux/platform_data/st_sensors_pdata.h>
@@ -625,6 +627,10 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 			}, {
 				.hw_id = ST_LSM6DS3TRC_ID,
 				.name = ST_LSM6DS3TRC_DEV_NAME,
+				.wai = 0x6a,
+			}, {
+				.hw_id = ST_LSM6DSE_ID,
+				.name = ST_LSM6DSE_DEV_NAME,
 				.wai = 0x6a,
 			},
 		},
@@ -1640,6 +1646,33 @@ int st_lsm6dsx_set_page(struct st_lsm6dsx_hw *hw, bool enable)
 	return err;
 }
 
+static bool st_lsm6dsx_match_compatible(struct device *dev, int wai,
+					int *sensor_idx, int *id_idx)
+{
+	const char *compat, *chip;
+	int c, i, j;
+
+	for (c = 0; !of_property_read_string_index(dev->of_node, "compatible",
+						   c, &compat); c++) {
+		chip = strchr(compat, ',');
+		chip = chip ? chip + 1 : compat;
+
+		for (i = 0; i < ARRAY_SIZE(st_lsm6dsx_sensor_settings); i++) {
+			for (j = 0; j < ST_LSM6DSX_MAX_ID; j++) {
+				if (st_lsm6dsx_sensor_settings[i].id[j].name &&
+				    st_lsm6dsx_sensor_settings[i].id[j].wai == wai &&
+				    !strcmp(st_lsm6dsx_sensor_settings[i].id[j].name, chip)) {
+					*sensor_idx = i;
+					*id_idx = j;
+					return true;
+				}
+			}
+		}
+	}
+
+	return false;
+}
+
 static int st_lsm6dsx_check_whoami(struct st_lsm6dsx_hw *hw, int id,
 				   const char **name)
 {
@@ -1666,8 +1699,9 @@ static int st_lsm6dsx_check_whoami(struct st_lsm6dsx_hw *hw, int id,
 		return err;
 	}
 
-	if (data != st_lsm6dsx_sensor_settings[i].id[j].wai) {
-		dev_err(hw->dev, "unsupported whoami [%02x]\n", data);
+	if (data != st_lsm6dsx_sensor_settings[i].id[j].wai &&
+	    !st_lsm6dsx_match_compatible(hw->dev, data, &i, &j)) {
+		dev_dbg(hw->dev, "unsupported whoami [%02x]\n", data);
 		return -ENODEV;
 	}
 
