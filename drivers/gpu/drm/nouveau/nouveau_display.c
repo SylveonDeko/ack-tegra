@@ -816,7 +816,7 @@ nouveau_display_dumb_create(struct drm_file *file_priv, struct drm_device *dev,
 	if (nouveau_drm(dev)->client.device.info.ram_size != 0)
 		domain = NOUVEAU_GEM_DOMAIN_VRAM;
 	else
-		domain = NOUVEAU_GEM_DOMAIN_GART;
+		domain = NOUVEAU_GEM_DOMAIN_GART | NOUVEAU_GEM_DOMAIN_COHERENT;
 
 	ret = nouveau_gem_new(cli, args->size, 0, domain, 0, 0, &bo);
 	if (ret)
