@@ -150,6 +150,16 @@ static int tegra_clk_rst_reset(struct reset_controller_dev *rcdev,
 	return tegra_clk_rst_deassert(rcdev, id);
 }
 
+static int tegra_clk_rst_status(struct reset_controller_dev *rcdev,
+		unsigned long id)
+{
+	if (id < periph_banks * 32)
+		return !!(readl_relaxed(clk_base + periph_regs[id / 32].rst_reg) &
+			  BIT(id % 32));
+
+	return -EOPNOTSUPP;
+}
+
 const struct tegra_clk_periph_regs *get_reg_bank(int clkid)
 {
 	int reg_bank = clkid / 32;
@@ -325,6 +335,7 @@ static const struct reset_control_ops rst_ops = {
 	.assert = tegra_clk_rst_assert,
 	.deassert = tegra_clk_rst_deassert,
 	.reset = tegra_clk_rst_reset,
+	.status = tegra_clk_rst_status,
 };
 
 static struct reset_controller_dev rst_ctlr = {
