@@ -46,6 +46,10 @@
 						UART_LSR_PE | UART_LSR_FE)
 #define TEGRA_UART_IRDA_CSR			0x08
 #define TEGRA_UART_SIR_ENABLED			0x80
+#define TEGRA_UART_INVERT_RXD			0x01
+#define TEGRA_UART_INVERT_TXD			0x02
+#define TEGRA_UART_INVERT_CTS			0x04
+#define TEGRA_UART_INVERT_RTS			0x08
 
 #define TEGRA_UART_TX_PIO			1
 #define TEGRA_UART_TX_DMA			2
@@ -122,6 +126,7 @@ struct tegra_uart_port {
 	unsigned int				tx_bytes;
 
 	bool					enable_modem_interrupt;
+	u8					irda_csr;
 
 	bool					rx_timeout;
 	int					rx_in_progress;
@@ -1013,6 +1018,8 @@ static int tegra_uart_hw_init(struct tegra_uart_port *tup)
 	udelay(10);
 	reset_control_deassert(tup->rst);
 
+	tegra_uart_write(tup, tup->irda_csr, TEGRA_UART_IRDA_CSR);
+
 	tup->rx_in_progress = 0;
 	tup->tx_in_progress = 0;
 
@@ -1443,6 +1450,15 @@ static int tegra_uart_parse_dt(struct platform_device *pdev,
 
 	tup->enable_modem_interrupt = of_property_read_bool(np,
 					"nvidia,enable-modem-interrupt");
+
+	if (of_property_read_bool(np, "nvidia,invert-rxd"))
+		tup->irda_csr |= TEGRA_UART_INVERT_RXD;
+	if (of_property_read_bool(np, "nvidia,invert-txd"))
+		tup->irda_csr |= TEGRA_UART_INVERT_TXD;
+	if (of_property_read_bool(np, "nvidia,invert-cts"))
+		tup->irda_csr |= TEGRA_UART_INVERT_CTS;
+	if (of_property_read_bool(np, "nvidia,invert-rts"))
+		tup->irda_csr |= TEGRA_UART_INVERT_RTS;
 
 	index = of_property_match_string(np, "dma-names", "rx");
 	if (index < 0) {
