@@ -1884,74 +1884,29 @@ remove_nodes:
 
 static int tegra210_emc_opp_table_init(struct tegra210_emc *emc)
 {
-	u32 hw_version = BIT(tegra_sku_info.soc_speedo_id);
-	struct dev_pm_opp *opp;
 	unsigned long rate;
-	int err, max_opps, i;
-
-	err = dev_pm_opp_set_supported_hw(emc->dev, &hw_version, 1);
-	if (err < 0)
-		return dev_err_probe(emc->dev, err, "failed to set OPP supported HW\n");
-
-	emc->hw_opp_token = err;
-
-	err = dev_pm_opp_of_add_table(emc->dev);
-	if (err) {
-		if (err == -ENODEV)
-			dev_err_probe(emc->dev, err,
-				      "OPP table not found, please update your device tree\n");
-		else
-			dev_err_probe(emc->dev, err, "failed to add OPP table\n");
-
-		goto put_hw_table;
-	}
-
-	max_opps = dev_pm_opp_get_opp_count(emc->dev);
-	if (max_opps <= 0) {
-		err = max_opps ?: -EINVAL;
-		dev_err_probe(emc->dev, err, "Failed to add OPPs\n");
-		goto remove_table;
-	}
-
-	if (emc->num_timings != max_opps) {
-		err = -EINVAL;
-		dev_err_probe(emc->dev, err, "OPP table does not match emc table\n");
-		goto remove_table;
-	}
+	unsigned int i;
+	int err;
 
 	for (i = 0; i < emc->num_timings; i++) {
-		rate = emc->timings[i].rate * 1000;
-		opp = dev_pm_opp_find_freq_exact(emc->dev, rate, true);
-		if (IS_ERR(opp)) {
-			err = PTR_ERR(opp);
-			dev_err_probe(emc->dev, err, "Rate %lu not found in OPP table\n", rate);
-			goto remove_table;
+		rate = emc->timings[i].rate * 1000UL;
+		err = dev_pm_opp_add(emc->dev, rate, 0);
+		if (err) {
+			dev_err_probe(emc->dev, err, "failed to add OPP for %lu Hz\n", rate);
+			dev_pm_opp_remove_all_dynamic(emc->dev);
+			return err;
 		}
-
-		dev_pm_opp_put(opp);
 	}
 
-	dev_info_once(emc->dev, "OPP HW ver. 0x%x, current clock rate %lu MHz\n",
-		      hw_version, clk_get_rate(emc->clk) / 1000000);
+	dev_info_once(emc->dev, "%u OPPs from EMC table, current clock rate %lu MHz\n",
+		      emc->num_timings, clk_get_rate(emc->clk) / 1000000);
 
 	return 0;
-
-remove_table:
-	dev_pm_opp_of_remove_table(emc->dev);
-put_hw_table:
-	dev_pm_opp_put_supported_hw(emc->hw_opp_token);
-	emc->hw_opp_token = 0;
-
-	return err;
 }
 
 static void tegra210_emc_opp_table_cleanup(struct tegra210_emc *emc)
 {
-	if (emc->hw_opp_token) {
-		dev_pm_opp_of_remove_table(emc->dev);
-		dev_pm_opp_put_supported_hw(emc->hw_opp_token);
-		emc->hw_opp_token = 0;
-	}
+	dev_pm_opp_remove_all_dynamic(emc->dev);
 }
 
 static void tegra210_emc_detect(struct tegra210_emc *emc)
