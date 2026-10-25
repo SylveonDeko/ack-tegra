@@ -706,9 +706,6 @@ static int bm92t_handle_dp_config_and_hpd(struct bm92t_info *info)
 		}
 		/* Configure DP Alt mode and start handling HPD */
 		bm92t_send_cmd(info, &cmd);
-
-		info->cable.charging_limit = valid_lanes > info->pdata->dp_lanes ?
-				      info->pdata->dp_lanes : valid_lanes;
 	} else {
 		dev_warn(&info->i2c_client->dev,
 			"No compatible DP Pin assignment (%d: %02X %02X %02X)!\n",
