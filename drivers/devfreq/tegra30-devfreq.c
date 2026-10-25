@@ -186,6 +186,7 @@ struct tegra_devfreq {
 	struct clk		*emc_clock;
 	unsigned long		max_freq;
 	unsigned long		cur_freq;
+	unsigned long		suspend_saved_rate;
 	struct notifier_block	clk_rate_change_nb;
 
 	struct delayed_work	cpufreq_update_work;
@@ -971,11 +972,49 @@ static const struct of_device_id tegra_devfreq_of_match[] = {
 
 MODULE_DEVICE_TABLE(of, tegra_devfreq_of_match);
 
+#define TEGRA210_EMC_SUSPEND_RATE	204000000
+
+static int tegra_devfreq_suspend_late(struct device *dev)
+{
+	struct tegra_devfreq *tegra = dev_get_drvdata(dev);
+	int err;
+
+	if (!of_machine_is_compatible("nvidia,tegra210"))
+		return 0;
+
+	tegra->suspend_saved_rate = clk_get_rate(tegra->emc_clock);
+
+	err = clk_set_rate(tegra->emc_clock, TEGRA210_EMC_SUSPEND_RATE);
+	if (err)
+		dev_err(dev, "failed to set EMC suspend rate: %d\n", err);
+
+	return 0;
+}
+
+static int tegra_devfreq_resume_early(struct device *dev)
+{
+	struct tegra_devfreq *tegra = dev_get_drvdata(dev);
+
+	if (!of_machine_is_compatible("nvidia,tegra210"))
+		return 0;
+
+	if (tegra->suspend_saved_rate)
+		clk_set_rate(tegra->emc_clock, tegra->suspend_saved_rate);
+
+	return 0;
+}
+
+static const struct dev_pm_ops tegra_devfreq_pm_ops = {
+	LATE_SYSTEM_SLEEP_PM_OPS(tegra_devfreq_suspend_late,
+				 tegra_devfreq_resume_early)
+};
+
 static struct platform_driver tegra_devfreq_driver = {
 	.probe	= tegra_devfreq_probe,
 	.driver = {
 		.name = "tegra-devfreq",
 		.of_match_table = tegra_devfreq_of_match,
+		.pm = pm_sleep_ptr(&tegra_devfreq_pm_ops),
 	},
 };
 module_platform_driver(tegra_devfreq_driver);
