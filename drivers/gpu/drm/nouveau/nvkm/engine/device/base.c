@@ -2067,7 +2067,7 @@ nv12b_chipset = {
 	.volt     = { 0x00000001, gm20b_volt_new },
 	.ce       = { 0x00000004, gm200_ce_new },
 	.dma      = { 0x00000001, gf119_dma_new },
-	.fifo     = { 0x00000001, gm200_fifo_new },
+	.fifo     = { 0x00000001, gm20b_fifo_new },
 	.gr       = { 0x00000001, gm20b_gr_new },
 	.sw       = { 0x00000001, gf100_sw_new },
 };
@@ -2092,7 +2092,7 @@ nv12e_chipset = {
 	.volt     = { 0x00000001, gm20b_b01_volt_new },
 	.ce       = { 0x00000004, gm200_ce_new },
 	.dma      = { 0x00000001, gf119_dma_new },
-	.fifo     = { 0x00000001, gm200_fifo_new },
+	.fifo     = { 0x00000001, gm20b_fifo_new },
 	.gr       = { 0x00000001, gm20b_gr_new },
 	.sw       = { 0x00000001, gf100_sw_new },
 };

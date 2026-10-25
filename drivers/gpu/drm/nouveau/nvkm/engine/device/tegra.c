@@ -251,6 +251,7 @@ nvkm_device_tegra_new(const struct nvkm_device_tegra_func *func,
 {
 	struct nvkm_device_tegra *tdev;
 	unsigned long rate;
+	struct clk *clk_m;
 	int ret;
 
 	if (!(tdev = kzalloc_obj(*tdev)))
@@ -327,6 +328,12 @@ nvkm_device_tegra_new(const struct nvkm_device_tegra_func *func,
 			       cfg, dbg, &tdev->device);
 	if (ret)
 		goto powerdown;
+
+	clk_m = clk_get_sys(NULL, "clk_m");
+	if (!IS_ERR(clk_m)) {
+		tdev->device.crystal = clk_get_rate(clk_m) / 1000;
+		clk_put(clk_m);
+	}
 
 	*pdevice = &tdev->device;
 

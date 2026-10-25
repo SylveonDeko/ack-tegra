@@ -26,6 +26,7 @@ struct nvkm_fifo_func {
 
 	irqreturn_t (*intr)(struct nvkm_inth *);
 	void (*intr_mmu_fault_unit)(struct nvkm_fifo *, int unit);
+	void (*intr_sched)(struct nvkm_fifo *);
 	void (*intr_ctxsw_timeout)(struct nvkm_fifo *, u32 engm);
 
 	const struct nvkm_fifo_func_mmu_fault {
@@ -111,6 +112,7 @@ bool gf100_fifo_intr_pbdma(struct nvkm_fifo *);
 void gf100_fifo_intr_mmu_fault(struct nvkm_fifo *);
 void gf100_fifo_intr_mmu_fault_unit(struct nvkm_fifo *, int);
 void gf100_fifo_intr_sched(struct nvkm_fifo *);
+void gf100_fifo_intr_sched_ctxsw(struct nvkm_fifo *);
 void gf100_fifo_intr_ctxsw_timeout(struct nvkm_fifo *, u32);
 void gf100_fifo_mmu_fault_recover(struct nvkm_fifo *, struct nvkm_fault_data *);
 extern const struct nvkm_enum gf100_fifo_mmu_fault_access[];

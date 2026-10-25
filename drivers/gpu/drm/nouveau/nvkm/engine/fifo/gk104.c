@@ -670,7 +670,10 @@ gk104_fifo_intr(struct nvkm_inth *inth)
 	}
 
 	if (stat & 0x00000100) {
-		gf100_fifo_intr_sched(fifo);
+		if (fifo->func->intr_sched)
+			fifo->func->intr_sched(fifo);
+		else
+			gf100_fifo_intr_sched(fifo);
 		nvkm_wr32(device, 0x002100, 0x00000100);
 		stat &= ~0x00000100;
 	}

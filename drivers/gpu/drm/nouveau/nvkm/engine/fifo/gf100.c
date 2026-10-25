@@ -641,7 +641,7 @@ gf100_fifo_intr_ctxsw_timeout(struct nvkm_fifo *fifo, u32 engm)
 	}
 }
 
-static void
+void
 gf100_fifo_intr_sched_ctxsw(struct nvkm_fifo *fifo)
 {
 	struct nvkm_runl *runl;

@@ -337,6 +337,8 @@ nvkm_fifo_dtor(struct nvkm_engine *engine)
 	struct nvkm_runl *runl, *runt;
 	struct nvkm_runq *runq, *rtmp;
 
+	if (fifo->userd.map)
+		nvkm_done(fifo->userd.mem);
 	if (fifo->userd.bar1)
 		nvkm_vmm_put(nvkm_bar_bar1_vmm(engine->subdev.device), &fifo->userd.bar1);
 	nvkm_memory_unref(&fifo->userd.mem);

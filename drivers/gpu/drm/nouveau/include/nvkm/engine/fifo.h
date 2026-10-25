@@ -37,6 +37,11 @@ struct nvkm_chan {
 	atomic_t errored;
 
 	struct {
+		u32 gp_get;
+		u32 ms;
+	} ctxsw;
+
+	struct {
 		struct nvkm_gsp_object object;
 		struct {
 			dma_addr_t addr;
@@ -78,6 +83,7 @@ struct nvkm_fifo {
 	struct {
 		struct nvkm_memory *mem;
 		struct nvkm_vma *bar1;
+		void __iomem *map;
 	} userd;
 
 	struct {
@@ -107,6 +113,7 @@ int gk208_fifo_new(struct nvkm_device *, enum nvkm_subdev_type, int inst, struct
 int gk20a_fifo_new(struct nvkm_device *, enum nvkm_subdev_type, int inst, struct nvkm_fifo **);
 int gm107_fifo_new(struct nvkm_device *, enum nvkm_subdev_type, int inst, struct nvkm_fifo **);
 int gm200_fifo_new(struct nvkm_device *, enum nvkm_subdev_type, int inst, struct nvkm_fifo **);
+int gm20b_fifo_new(struct nvkm_device *, enum nvkm_subdev_type, int inst, struct nvkm_fifo **);
 int gp100_fifo_new(struct nvkm_device *, enum nvkm_subdev_type, int inst, struct nvkm_fifo **);
 int gv100_fifo_new(struct nvkm_device *, enum nvkm_subdev_type, int inst, struct nvkm_fifo **);
 int tu102_fifo_new(struct nvkm_device *, enum nvkm_subdev_type, int inst, struct nvkm_fifo **);
