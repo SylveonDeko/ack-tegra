@@ -1775,8 +1775,12 @@ static int tegra_sor_connector_get_modes(struct drm_connector *connector)
 	struct tegra_sor *sor = to_sor(output);
 	int err;
 
-	if (sor->aux)
+	if (sor->aux) {
 		drm_dp_aux_enable(sor->aux);
+
+		if (drm_dp_link_probe(sor->aux, &sor->link) < 0)
+			sor->link.max_lanes = 0;
+	}
 
 	err = tegra_output_connector_get_modes(connector);
 
@@ -1790,6 +1794,20 @@ static enum drm_mode_status
 tegra_sor_connector_mode_valid(struct drm_connector *connector,
 			       const struct drm_display_mode *mode)
 {
+	struct tegra_output *output = connector_to_output(connector);
+	struct tegra_sor *sor = to_sor(output);
+	unsigned int bpc = connector->display_info.bpc == 6 ? 6 : 8;
+	unsigned long requirement, capacity;
+
+	if (!sor->aux || !sor->link.max_lanes)
+		return MODE_OK;
+
+	requirement = mode->clock * bpc * 3;
+	capacity = sor->link.max_lanes * min(sor->link.max_rate, 540000u) * 8;
+
+	if (requirement > capacity)
+		return MODE_CLOCK_HIGH;
+
 	return MODE_OK;
 }
 
@@ -2732,14 +2750,12 @@ static void tegra_sor_dp_enable(struct drm_encoder *encoder)
 	struct tegra_sor_config config;
 	struct tegra_sor_state *state;
 	struct drm_display_mode *mode;
-	struct drm_display_info *info;
 	unsigned int i;
 	u32 value;
 	int err;
 
 	state = to_sor_state(output->connector.state);
 	mode = &encoder->crtc->state->adjusted_mode;
-	info = &output->connector.display_info;
 
 	err = host1x_client_resume(&sor->client);
 	if (err < 0) {
@@ -2768,7 +2784,7 @@ static void tegra_sor_dp_enable(struct drm_encoder *encoder)
 
 	tegra_sor_filter_rates(sor);
 
-	err = drm_dp_link_choose(&sor->link, mode, info);
+	err = drm_dp_link_choose(&sor->link, mode, state->bpc);
 	if (err < 0)
 		dev_err(sor->dev, "failed to choose link: %d\n", err);
 
@@ -2886,15 +2902,15 @@ static void tegra_sor_dp_enable(struct drm_encoder *encoder)
 
 	tegra_sor_dp_term_calibrate(sor);
 
+	err = drm_dp_link_power_up(sor->aux, sor->link.revision);
+	if (err < 0)
+		dev_err(sor->dev, "failed to power up DP link: %d\n", err);
+
 	err = drm_dp_link_train(&sor->link);
 	if (err < 0)
 		dev_err(sor->dev, "link training failed: %d\n", err);
 	else
 		dev_dbg(sor->dev, "link training succeeded\n");
-
-	err = drm_dp_link_power_up(sor->aux, sor->link.revision);
-	if (err < 0)
-		dev_err(sor->dev, "failed to power up DP link: %d\n", err);
 
 	/* compute configuration */
 	memset(&config, 0, sizeof(config));
