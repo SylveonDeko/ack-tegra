@@ -125,6 +125,9 @@ static int __maybe_unused tegra124_cpufreq_suspend(struct device *dev)
 	struct tegra124_cpufreq_priv *priv = dev_get_drvdata(dev);
 	int err;
 
+	if (of_machine_is_compatible("nvidia,tegra210"))
+		return 0;
+
 	/*
 	 * PLLP rate 408Mhz is below the CPU Fmax at Vmin and is safe to
 	 * use during suspend and resume. So, switch the CPU clock source

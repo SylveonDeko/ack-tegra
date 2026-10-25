@@ -1826,16 +1826,6 @@ di_err1:
  */
 int tegra_dfll_suspend(struct device *dev)
 {
-	struct tegra_dfll *td = dev_get_drvdata(dev);
-
-	if (dfll_is_running(td)) {
-		dev_err(td->dev, "DFLL still enabled while suspending\n");
-		return -EBUSY;
-	}
-
-	reset_control_assert(td->dvco_rst);
-	reset_control_assert(td->dfll_rst);
-
 	return 0;
 }
 EXPORT_SYMBOL(tegra_dfll_suspend);
