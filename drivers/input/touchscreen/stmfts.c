@@ -1590,6 +1590,9 @@ static int stmfts_runtime_resume(struct device *dev)
 	struct stmfts_data *sdata = dev_get_drvdata(dev);
 	int err;
 
+	if (!sdata->ops->runtime_resume)
+		return 0;
+
 	err = sdata->ops->runtime_resume(sdata);
 	if (err)
 		dev_err(dev, "failed to resume device: %d\n", err);
@@ -1649,7 +1652,6 @@ static const struct stmfts_chip_ops stmftm4_ops = {
 	.set_scan	= stmfts_set_scan,
 	.power_on	= stmftm4_power_on,
 	.runtime_suspend = stmftm4_runtime_suspend,
-	.runtime_resume	= stmftm4_configure,
 };
 
 #ifdef CONFIG_OF
