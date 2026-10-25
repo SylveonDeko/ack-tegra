@@ -39,6 +39,7 @@
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/io.h>
+#include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/pm_opp.h>
@@ -263,8 +264,36 @@ static int tegra_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 	return err;
 }
 
+static int tegra_pwm_get_state(struct pwm_chip *chip, struct pwm_device *pwm,
+			       struct pwm_state *state)
+{
+	struct tegra_pwm_chip *pc = to_tegra_pwm_chip(chip);
+	u32 val, scale, duty;
+	int err;
+
+	err = pm_runtime_resume_and_get(pwmchip_parent(chip));
+	if (err)
+		return err;
+
+	val = pwm_readl(pc, pwm->hwpwm);
+
+	pm_runtime_put(pwmchip_parent(chip));
+
+	scale = (val >> PWM_SCALE_SHIFT) & GENMASK(PWM_SCALE_WIDTH - 1, 0);
+	duty = (val >> PWM_DUTY_SHIFT) & GENMASK(PWM_DUTY_WIDTH, 0);
+
+	state->enabled = !!(val & PWM_ENABLE);
+	state->polarity = PWM_POLARITY_NORMAL;
+	state->period = DIV64_U64_ROUND_UP(((u64)scale + 1) * NSEC_PER_SEC << PWM_DUTY_WIDTH,
+					   pc->clk_rate);
+	state->duty_cycle = DIV_ROUND_UP_ULL(state->period * duty, 1 << PWM_DUTY_WIDTH);
+
+	return 0;
+}
+
 static const struct pwm_ops tegra_pwm_ops = {
 	.apply = tegra_pwm_apply,
+	.get_state = tegra_pwm_get_state,
 };
 
 static int tegra_pwm_probe(struct platform_device *pdev)
@@ -272,6 +301,7 @@ static int tegra_pwm_probe(struct platform_device *pdev)
 	struct pwm_chip *chip;
 	struct tegra_pwm_chip *pc;
 	const struct tegra_pwm_soc *soc;
+	unsigned int i;
 	int ret;
 
 	soc = of_device_get_match_data(&pdev->dev);
@@ -328,6 +358,10 @@ static int tegra_pwm_probe(struct platform_device *pdev)
 	}
 
 	reset_control_deassert(pc->rst);
+
+	for (i = 0; i < pc->soc->num_channels; i++)
+		if (pwm_readl(pc, i) & PWM_ENABLE)
+			pm_runtime_get_noresume(&pdev->dev);
 
 	chip->ops = &tegra_pwm_ops;
 
