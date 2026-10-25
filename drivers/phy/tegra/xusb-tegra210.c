@@ -2217,17 +2217,21 @@ static int tegra210_usb2_phy_set_mode(struct phy *phy, enum phy_mode mode,
 		} else if (submode == USB_ROLE_DEVICE) {
 			tegra210_xusb_padctl_vbus_override(padctl, true);
 		} else if (submode == USB_ROLE_NONE) {
+			enum usb_role role =
+				usb_role_switch_get_role(port->base.usb_role_sw);
+
 			/*
 			 * When port is peripheral only or role transitions to
 			 * USB_ROLE_NONE from USB_ROLE_DEVICE, regulator is not
 			 * be enabled.
 			 */
-			if (port->supply_enabled) {
+			if (role != USB_ROLE_HOST && port->supply_enabled) {
 				regulator_disable(port->supply);
 				port->supply_enabled = false;
 			}
 
-			tegra210_xusb_padctl_id_override(padctl, false);
+			if (role != USB_ROLE_HOST)
+				tegra210_xusb_padctl_id_override(padctl, false);
 			tegra210_xusb_padctl_vbus_override(padctl, false);
 		}
 	}
