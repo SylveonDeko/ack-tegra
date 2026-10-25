@@ -71,6 +71,7 @@
 #define  PMC_CNTRL_SIDE_EFFECT_LP0	BIT(14) /* LP0 when CPU pwr gated */
 #define  PMC_CNTRL_SYSCLK_OE		BIT(11) /* system clock enable */
 #define  PMC_CNTRL_SYSCLK_POLARITY	BIT(10) /* sys clk polarity */
+#define  PMC_CNTRL_PWRREQ_OE		BIT(9) /* core pwr req enable */
 #define  PMC_CNTRL_PWRREQ_POLARITY	BIT(8)
 #define  PMC_CNTRL_BLINK_EN		7
 #define  PMC_CNTRL_MAIN_RST		BIT(4)
@@ -2505,7 +2506,8 @@ static int tegra_pmc_parse_dt(struct tegra_pmc *pmc, struct device_node *np)
 		}
 	}
 
-	pmc->suspend_mode = tegra_pm_validate_suspend_mode(pmc->suspend_mode);
+	if (IS_ENABLED(CONFIG_ARM))
+		pmc->suspend_mode = tegra_pm_validate_suspend_mode(pmc->suspend_mode);
 
 	if (of_property_read_u32(np, "nvidia,cpu-pwr-good-time", &value))
 		pmc->suspend_mode = TEGRA_SUSPEND_NONE;
@@ -4462,6 +4464,50 @@ static const struct tegra_wake_event tegra210_wake_events[] = {
 	TEGRA_WAKE_IRQ("pmu", 51, 86),
 };
 
+static int tegra210_pmc_syscore_suspend(void *data)
+{
+	struct tegra_pmc *pmc = data;
+	u64 ticks;
+	u32 value;
+
+	ticks = (u64)pmc->cpu_good_time * 32768 + USEC_PER_SEC - 1;
+	do_div(ticks, USEC_PER_SEC);
+	tegra_pmc_writel(pmc, ticks, PMC_CPUPWRGOOD_TIMER);
+
+	ticks = (u64)pmc->cpu_off_time * 32768 + USEC_PER_SEC - 1;
+	do_div(ticks, USEC_PER_SEC);
+	tegra_pmc_writel(pmc, ticks, PMC_CPUPWROFF_TIMER);
+
+	value = tegra_pmc_readl(pmc, PMC_CNTRL);
+	value &= ~PMC_CNTRL_SIDE_EFFECT_LP0;
+
+	if (pmc->combined_req)
+		value &= ~PMC_CNTRL_PWRREQ_OE;
+	else
+		value |= PMC_CNTRL_PWRREQ_OE;
+
+	value |= PMC_CNTRL_CPU_PWRREQ_OE;
+	tegra_pmc_writel(pmc, value, PMC_CNTRL);
+
+	return 0;
+}
+
+static const struct syscore_ops tegra210_pmc_syscore_ops = {
+	.suspend = tegra210_pmc_syscore_suspend,
+};
+
+static void tegra210_pmc_init(struct tegra_pmc *pmc)
+{
+	tegra20_pmc_init(pmc);
+
+	if (!IS_ENABLED(CONFIG_ARM64) || !IS_ENABLED(CONFIG_PM_SLEEP))
+		return;
+
+	pmc->syscore.ops = &tegra210_pmc_syscore_ops;
+	pmc->syscore.data = pmc;
+	register_syscore(&pmc->syscore);
+}
+
 static const struct tegra_pmc_soc tegra210_pmc_soc = {
 	.supports_core_domain = false,
 	.num_powergates = ARRAY_SIZE(tegra210_powergates),
@@ -4480,7 +4526,7 @@ static const struct tegra_pmc_soc tegra210_pmc_soc = {
 	.num_pin_descs = ARRAY_SIZE(tegra210_pin_descs),
 	.pin_descs = tegra210_pin_descs,
 	.regs = &tegra20_pmc_regs,
-	.init = tegra20_pmc_init,
+	.init = tegra210_pmc_init,
 	.setup_irq_polarity = tegra20_pmc_setup_irq_polarity,
 	.powergate_set = tegra114_powergate_set,
 	.irq_set_wake = tegra210_pmc_irq_set_wake,
@@ -4543,7 +4589,7 @@ static const struct tegra_pmc_soc tegra210b01_pmc_soc = {
 	.num_pin_descs = ARRAY_SIZE(tegra210_pin_descs),
 	.pin_descs = tegra210_pin_descs,
 	.regs = &tegra20_pmc_regs,
-	.init = tegra20_pmc_init,
+	.init = tegra210_pmc_init,
 	.setup_irq_polarity = tegra20_pmc_setup_irq_polarity,
 	.powergate_set = tegra114_powergate_set,
 	.irq_set_wake = tegra210_pmc_irq_set_wake,
