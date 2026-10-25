@@ -124,6 +124,28 @@ config JOYSTICK_INTERACT
 	  To compile this driver as a module, choose M here: the
 	  module will be called interact.
 
+config JOYSTICK_JOYCON_SERDEV
+	tristate "Nintendo Joy-Con serial rail support"
+	depends on SERIAL_DEV_BUS
+	depends on LEDS_CLASS
+	depends on POWER_SUPPLY
+	select CRC8
+	select IIO_TRIGGERED_BUFFER if IIO
+	help
+	  Say Y here to use the Nintendo Switch Joy-Cons and the Switch Lite
+	  gamepad through the console's serial rails.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called joycon-serdev.
+
+config JOYCON_SERDEV_FF
+	bool "Nintendo Joy-Con serial rail force feedback support"
+	depends on JOYSTICK_JOYCON_SERDEV
+	select INPUT_FF_MEMLESS
+	help
+	  Say Y here to enable rumble on Joy-Cons attached to the serial
+	  rails.
+
 config JOYSTICK_SIDEWINDER
 	tristate "Microsoft SideWinder digital joysticks and gamepads"
 	select GAMEPORT
