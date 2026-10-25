@@ -32,7 +32,7 @@ bool nouveau_mem_compatible(struct ttm_resource *res,
 			    const struct ttm_place *place,
 			    size_t size);
 int nouveau_mem_vram(struct ttm_resource *, bool contig, u8 page);
-int nouveau_mem_host(struct ttm_resource *, struct ttm_tt *);
+int nouveau_mem_host(struct ttm_resource *, struct ttm_tt *, u8 page);
 void nouveau_mem_fini(struct nouveau_mem *);
 int nouveau_mem_map(struct nouveau_mem *, struct nvif_vmm *, struct nvif_vma *);
 int

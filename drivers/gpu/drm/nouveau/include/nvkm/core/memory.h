@@ -9,6 +9,7 @@ struct nvkm_vmm;
 struct nvkm_tags {
 	struct nvkm_mm_node *mn;
 	refcount_t refcount;
+	struct nvkm_device *device;
 };
 
 enum nvkm_memory_target {

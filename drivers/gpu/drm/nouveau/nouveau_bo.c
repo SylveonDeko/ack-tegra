@@ -207,6 +207,15 @@ nouveau_bo_fixup_align(struct nouveau_bo *nvbo, int *align, u64 *size)
 	*size = roundup_64(*size, PAGE_SIZE);
 }
 
+static bool
+nouveau_bo_host_comp(struct nouveau_drm *drm)
+{
+	struct nvif_mmu *mmu = &drm->client.mmu;
+
+	return !drm->agp.bridge &&
+	       (mmu->type[drm->ttm.type_ncoh[1]].type & NVIF_MEM_COMP);
+}
+
 struct nouveau_bo *
 nouveau_bo_alloc(struct nouveau_cli *cli, u64 *size, int *align, u32 domain,
 		 u32 tile_mode, u32 tile_flags, bool internal)
@@ -279,7 +288,9 @@ nouveau_bo_alloc(struct nouveau_cli *cli, u64 *size, int *align, u32 domain,
 			    (domain & NOUVEAU_GEM_DOMAIN_VRAM) && !vmm->page[i].vram)
 				continue;
 			if ((domain & NOUVEAU_GEM_DOMAIN_GART) &&
-			    (!vmm->page[i].host || vmm->page[i].shift > PAGE_SHIFT))
+			    (!vmm->page[i].host ||
+			     (vmm->page[i].shift > PAGE_SHIFT &&
+			      !(nvbo->comp && vmm->page[i].comp && nouveau_bo_host_comp(drm)))))
 				continue;
 
 			/* Select this page size if it's the first that supports
@@ -319,11 +330,14 @@ nouveau_bo_alloc(struct nouveau_cli *cli, u64 *size, int *align, u32 domain,
 			if ((domain & NOUVEAU_GEM_DOMAIN_VRAM) && !vmm->page[i].vram)
 				continue;
 			if ((domain & NOUVEAU_GEM_DOMAIN_GART) &&
-			    (!vmm->page[i].host || vmm->page[i].shift > PAGE_SHIFT))
+			    (!vmm->page[i].host ||
+			     (vmm->page[i].shift > PAGE_SHIFT &&
+			      !(nvbo->comp && vmm->page[i].comp && nouveau_bo_host_comp(drm)))))
 				continue;
 
 			/* pick the last one as it will be smallest. */
-			pi = i;
+			if (pi < 0 || !nvbo->comp || vmm->page[i].comp)
+				pi = i;
 
 			/* Stop once the buffer is larger than the current page size. */
 			if (*size >= 1ULL << vmm->page[i].shift)
@@ -332,6 +346,12 @@ nouveau_bo_alloc(struct nouveau_cli *cli, u64 *size, int *align, u32 domain,
 		if (WARN_ON(pi < 0)) {
 			kfree(nvbo);
 			return ERR_PTR(-EINVAL);
+		}
+
+		if (nvbo->comp && !vmm->page[pi].comp) {
+			if (mmu->object.oclass >= NVIF_CLASS_MMU_GF100)
+				nvbo->kind = mmu->kind[nvbo->kind];
+			nvbo->comp = 0;
 		}
 		nvbo->page = vmm->page[pi].shift;
 	}
@@ -1415,6 +1435,47 @@ vm_fault_t nouveau_ttm_fault_reserve_notify(struct ttm_buffer_object *bo)
 	return 0;
 }
 
+static void
+nouveau_ttm_tt_unpopulate_contig(struct nouveau_drm *drm, struct ttm_tt *ttm,
+				 u8 shift, pgoff_t num_pages)
+{
+	const pgoff_t step = 1UL << (shift - PAGE_SHIFT);
+	pgoff_t i;
+
+	for (i = 0; i < num_pages; i += step) {
+		dma_free_pages(drm->dev->dev, 1UL << shift, ttm->pages[i],
+			       ttm->dma_address[i], DMA_BIDIRECTIONAL);
+		memset(&ttm->pages[i], 0, step * sizeof(*ttm->pages));
+	}
+}
+
+static int
+nouveau_ttm_tt_populate_contig(struct nouveau_drm *drm, struct ttm_tt *ttm, u8 shift)
+{
+	const pgoff_t step = 1UL << (shift - PAGE_SHIFT);
+	pgoff_t i, j;
+
+	for (i = 0; i < ttm->num_pages; i += step) {
+		struct page *page;
+		dma_addr_t dma;
+
+		page = dma_alloc_pages(drm->dev->dev, 1UL << shift, &dma,
+				       DMA_BIDIRECTIONAL,
+				       GFP_KERNEL | __GFP_ZERO | __GFP_NOWARN);
+		if (!page) {
+			nouveau_ttm_tt_unpopulate_contig(drm, ttm, shift, i);
+			return -ENOMEM;
+		}
+
+		for (j = 0; j < step; j++) {
+			ttm->pages[i + j] = page + j;
+			ttm->dma_address[i + j] = dma + (j << PAGE_SHIFT);
+		}
+	}
+
+	return 0;
+}
+
 static int
 nouveau_ttm_tt_populate(struct ttm_device *bdev,
 			struct ttm_tt *ttm, struct ttm_operation_ctx *ctx)
@@ -1434,6 +1495,9 @@ nouveau_ttm_tt_populate(struct ttm_device *bdev,
 
 	drm = nouveau_bdev(bdev);
 
+	if (!drm->agp.bridge && nouveau_sgdma_page(ttm) > PAGE_SHIFT)
+		return nouveau_ttm_tt_populate_contig(drm, ttm, nouveau_sgdma_page(ttm));
+
 	return ttm_pool_alloc(&drm->ttm.bdev.pool, ttm, ctx);
 }
 
@@ -1450,6 +1514,10 @@ nouveau_ttm_tt_unpopulate(struct ttm_device *bdev,
 	nouveau_ttm_tt_unbind(bdev, ttm);
 
 	drm = nouveau_bdev(bdev);
+
+	if (!drm->agp.bridge && nouveau_sgdma_page(ttm) > PAGE_SHIFT)
+		return nouveau_ttm_tt_unpopulate_contig(drm, ttm, nouveau_sgdma_page(ttm),
+							ttm->num_pages);
 
 	return ttm_pool_free(&drm->ttm.bdev.pool, ttm);
 }

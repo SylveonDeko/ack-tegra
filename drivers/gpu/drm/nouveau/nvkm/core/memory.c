@@ -91,6 +91,7 @@ nvkm_memory_tags_get(struct nvkm_memory *memory, struct nvkm_device *device,
 	}
 
 	refcount_set(&tags->refcount, 1);
+	tags->device = device;
 	*ptags = memory->tags = tags;
 	mutex_unlock(&fb->tags.mutex);
 	return 0;
@@ -108,6 +109,15 @@ static void
 nvkm_memory_del(struct kref *kref)
 {
 	struct nvkm_memory *memory = container_of(kref, typeof(*memory), kref);
+	if (memory->tags) {
+		struct nvkm_fb *fb = memory->tags->device->fb;
+
+		mutex_lock(&fb->tags.mutex);
+		nvkm_mm_free(&fb->tags.mm, &memory->tags->mn);
+		kfree(memory->tags);
+		memory->tags = NULL;
+		mutex_unlock(&fb->tags.mutex);
+	}
 	if (!WARN_ON(!memory->func)) {
 		if (memory->func->dtor)
 			memory = memory->func->dtor(memory);

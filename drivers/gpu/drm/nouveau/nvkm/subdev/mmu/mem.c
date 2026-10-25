@@ -32,6 +32,7 @@ struct nvkm_mem {
 	enum nvkm_memory_target target;
 	struct nvkm_mmu *mmu;
 	u64 pages;
+	u8 page;
 	struct page **mem;
 	union {
 		struct scatterlist *sgl;
@@ -48,7 +49,24 @@ nvkm_mem_target(struct nvkm_memory *memory)
 static u8
 nvkm_mem_page(struct nvkm_memory *memory)
 {
-	return PAGE_SHIFT;
+	return nvkm_mem(memory)->page;
+}
+
+static bool
+nvkm_mem_dma_contig(struct nvkm_mem *mem)
+{
+	const u64 step = 1ULL << (mem->page - PAGE_SHIFT);
+	u64 i;
+
+	for (i = 0; i < mem->pages; i++) {
+		const dma_addr_t base = mem->dma[i & ~(step - 1)];
+
+		if (!IS_ALIGNED(base, 1ULL << mem->page) ||
+		    mem->dma[i] != base + ((i & (step - 1)) << PAGE_SHIFT))
+			return false;
+	}
+
+	return true;
 }
 
 static u64
@@ -160,13 +178,14 @@ nvkm_mem_new_host(struct nvkm_mmu *mmu, int type, u8 page, u64 size,
 	else
 		target = NVKM_MEM_TARGET_NCOH;
 
-	if (page != PAGE_SHIFT)
+	if (page < PAGE_SHIFT)
 		return -EINVAL;
 
 	if (!(mem = kzalloc_obj(*mem)))
 		return -ENOMEM;
 	mem->target = target;
 	mem->mmu = mmu;
+	mem->page = page;
 	*pmemory = &mem->memory;
 
 	if (!(ret = nvif_unpack(ret, &argv, &argc, args->v0, 0, 0, false))) {
@@ -176,11 +195,15 @@ nvkm_mem_new_host(struct nvkm_mmu *mmu, int type, u8 page, u64 size,
 		} else {
 			nvkm_memory_ctor(&nvkm_mem_sgl, &mem->memory);
 			mem->sgl = args->v0.sgl;
+			if (page != PAGE_SHIFT)
+				return -EINVAL;
 		}
 
-		if (!IS_ALIGNED(size, PAGE_SIZE))
+		if (!IS_ALIGNED(size, 1ULL << page))
 			return -EINVAL;
 		mem->pages = size >> PAGE_SHIFT;
+		if (page > PAGE_SHIFT && !nvkm_mem_dma_contig(mem))
+			return -EINVAL;
 		return 0;
 	} else
 	if ( (ret = nvif_unvers(ret, &argv, &argc, args->vn))) {
@@ -189,6 +212,8 @@ nvkm_mem_new_host(struct nvkm_mmu *mmu, int type, u8 page, u64 size,
 	}
 
 	nvkm_memory_ctor(&nvkm_mem_dma, &mem->memory);
+	if (page != PAGE_SHIFT)
+		return -EINVAL;
 	size = ALIGN(size, PAGE_SIZE) >> PAGE_SHIFT;
 
 	if (!(mem->mem = kvmalloc_objs(*mem->mem, size)))

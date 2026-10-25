@@ -77,6 +77,19 @@ gf100_vmm_pgt_dma(struct nvkm_vmm *vmm, struct nvkm_mmu_pt *pt,
 		return;
 	}
 
+	if (map->page->shift > PAGE_SHIFT) {
+		const u32 step = 1 << (map->page->shift - PAGE_SHIFT);
+
+		VMM_SPAM(vmm, "DMAL %08x %08x PTE(s)", ptei, ptes);
+		nvkm_kmap(pt->memory);
+		while (ptes--) {
+			gf100_vmm_pgt_pte(vmm, pt, ptei++, 1, map, *map->dma);
+			map->dma += step;
+		}
+		nvkm_done(pt->memory);
+		return;
+	}
+
 	VMM_MAP_ITER_DMA(vmm, pt, ptei, ptes, map, gf100_vmm_pgt_pte);
 }
 
@@ -282,7 +295,8 @@ gf100_vmm_valid(struct nvkm_vmm *vmm, void *argv, u32 argc,
 	if (kindm[kind] != kind) {
 		u32 comp = (page->shift == 16 && !gm20x) ? 16 : 17;
 		u32 tags = ALIGN(nvkm_memory_size(memory), 1 << 17) >> comp;
-		if (aper != 0 || !(page->type & NVKM_VMM_PAGE_COMP)) {
+		if (!(page->type & NVKM_VMM_PAGE_COMP) ||
+		    (aper != 0 && !(page->type & NVKM_VMM_PAGE_HOST))) {
 			VMM_DEBUG(vmm, "comp %d %02x", aper, page->type);
 			return -EINVAL;
 		}
@@ -306,6 +320,7 @@ gf100_vmm_valid(struct nvkm_vmm *vmm, void *argv, u32 argc,
 			} else {
 				map->ctag |= tags << 1 | 1;
 			}
+			vol = 0;
 		} else {
 			kind = kindm[kind];
 		}

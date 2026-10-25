@@ -26,6 +26,7 @@
 
 #include <subdev/bar.h>
 #include <subdev/fb.h>
+#include <subdev/ltc.h>
 
 #include <nvif/if500d.h>
 #include <nvif/if900d.h>
@@ -279,10 +280,14 @@ nvkm_mmu_host(struct nvkm_mmu *mmu)
 {
 	struct nvkm_device *device = mmu->subdev.device;
 	u8 type = NVKM_MEM_KIND * !!mmu->func->kind_sys;
+	u8 heap_type = NVKM_MEM_HOST;
 	int heap;
 
+	if (device->fb && !device->fb->ram && device->ltc && device->ltc->num_tags)
+		heap_type |= NVKM_MEM_COMP;
+
 	/* Non-mappable system memory. */
-	heap = nvkm_mmu_heap(mmu, NVKM_MEM_HOST, ~0ULL);
+	heap = nvkm_mmu_heap(mmu, heap_type, ~0ULL);
 	nvkm_mmu_type(mmu, heap, type);
 
 	/* Non-coherent, cached, system memory.

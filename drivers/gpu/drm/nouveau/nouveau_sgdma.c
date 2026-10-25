@@ -14,7 +14,14 @@ struct nouveau_sgdma_be {
 	 */
 	struct ttm_tt ttm;
 	struct nouveau_mem *mem;
+	u8 page;
 };
+
+u8
+nouveau_sgdma_page(struct ttm_tt *ttm)
+{
+	return ((struct nouveau_sgdma_be *)ttm)->page;
+}
 
 void
 nouveau_sgdma_destroy(struct ttm_device *bdev, struct ttm_tt *ttm)
@@ -38,7 +45,7 @@ nouveau_sgdma_bind(struct ttm_device *bdev, struct ttm_tt *ttm, struct ttm_resou
 	if (nvbe->mem)
 		return 0;
 
-	ret = nouveau_mem_host(reg, &nvbe->ttm);
+	ret = nouveau_mem_host(reg, &nvbe->ttm, nvbe->page);
 	if (ret)
 		return ret;
 
@@ -80,6 +87,11 @@ nouveau_sgdma_create_ttm(struct ttm_buffer_object *bo, uint32_t page_flags)
 	nvbe = kzalloc_obj(*nvbe);
 	if (!nvbe)
 		return NULL;
+
+	nvbe->page = PAGE_SHIFT;
+	if (!(page_flags & TTM_TT_FLAG_EXTERNAL) && !drm->agp.bridge &&
+	    nvbo->page > PAGE_SHIFT)
+		nvbe->page = nvbo->page;
 
 	if (ttm_sg_tt_init(&nvbe->ttm, bo, page_flags, caching)) {
 		kfree(nvbe);

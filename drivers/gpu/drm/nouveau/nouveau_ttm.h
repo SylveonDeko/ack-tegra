@@ -12,6 +12,7 @@ extern const struct ttm_resource_manager_func nouveau_vram_manager;
 extern const struct ttm_resource_manager_func nouveau_gart_manager;
 extern const struct ttm_resource_manager_func nv04_gart_manager;
 
+u8 nouveau_sgdma_page(struct ttm_tt *ttm);
 struct ttm_tt *nouveau_sgdma_create_ttm(struct ttm_buffer_object *bo,
 					u32 page_flags);
 
