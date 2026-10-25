@@ -9,6 +9,7 @@
 #include <linux/iommu.h>
 #include <linux/kernel.h>
 #include <linux/of.h>
+#include <linux/of_iommu.h>
 #include <linux/of_platform.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
@@ -285,8 +286,14 @@ static void tegra_smmu_free_asid(struct tegra_smmu *smmu, unsigned int id)
 	clear_bit(id, smmu->asids);
 }
 
+static int tegra_smmu_as_prepare(struct tegra_smmu *smmu,
+				 struct tegra_smmu_as *as);
+static void tegra_smmu_as_unprepare(struct tegra_smmu *smmu,
+				    struct tegra_smmu_as *as);
+
 static struct iommu_domain *tegra_smmu_domain_alloc_paging(struct device *dev)
 {
+	struct tegra_smmu *smmu = dev ? dev_iommu_priv_get(dev) : NULL;
 	struct tegra_smmu_as *as;
 
 	as = kzalloc_obj(*as);
@@ -325,6 +332,14 @@ static struct iommu_domain *tegra_smmu_domain_alloc_paging(struct device *dev)
 	as->domain.geometry.aperture_end = 0xffffffff;
 	as->domain.geometry.force_aperture = true;
 
+	if (smmu && tegra_smmu_as_prepare(smmu, as) < 0) {
+		kfree(as->pts);
+		kfree(as->count);
+		iommu_free_pages(as->pd);
+		kfree(as);
+		return NULL;
+	}
+
 	return &as->domain;
 }
 
@@ -333,6 +348,9 @@ static void tegra_smmu_domain_free(struct iommu_domain *domain)
 	struct tegra_smmu_as *as = to_smmu_as(domain);
 
 	/* TODO: free page directory and page tables */
+
+	if (as->smmu)
+		tegra_smmu_as_unprepare(as->smmu, as);
 
 	WARN_ON_ONCE(as->use_count);
 	kfree(as->count);
@@ -1003,6 +1021,7 @@ static const struct iommu_ops tegra_smmu_ops = {
 	.probe_device = tegra_smmu_probe_device,
 	.device_group = tegra_smmu_device_group,
 	.of_xlate = tegra_smmu_of_xlate,
+	.get_resv_regions = of_iommu_get_resv_regions,
 	.default_domain_ops = &(const struct iommu_domain_ops) {
 		.attach_dev	= tegra_smmu_attach_dev,
 		.map_pages	= tegra_smmu_map,
