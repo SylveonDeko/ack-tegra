@@ -177,6 +177,11 @@ static const struct inv_icm42600_hw inv_icm42600_hw[INV_CHIP_NB] = {
 		.name = "icm42631",
 		.conf = &inv_icm42600_default_conf,
 	},
+	[INV_CHIP_ICM40607] = {
+		.whoami = INV_ICM42600_WHOAMI_ICM40607,
+		.name = "icm40607",
+		.conf = &inv_icm42600_default_conf,
+	},
 };
 
 const struct iio_mount_matrix *
@@ -500,20 +505,26 @@ static int inv_icm42600_set_conf(struct inv_icm42600_state *st,
 static int inv_icm42600_setup(struct inv_icm42600_state *st,
 			      inv_icm42600_bus_setup bus_setup)
 {
-	const struct inv_icm42600_hw *hw = &inv_icm42600_hw[st->chip];
+	const struct inv_icm42600_hw *hw;
 	const struct device *dev = regmap_get_device(st->map);
 	unsigned int val;
-	int ret;
+	int chip, ret;
 
 	/* check chip self-identification value */
 	ret = regmap_read(st->map, INV_ICM42600_REG_WHOAMI, &val);
 	if (ret)
 		return ret;
-	if (val != hw->whoami) {
-		dev_err(dev, "invalid whoami %#02x expected %#02x (%s)\n",
-			val, hw->whoami, hw->name);
+
+	for (chip = INV_CHIP_INVALID + 1; chip < INV_CHIP_NB; chip++) {
+		if (inv_icm42600_hw[chip].whoami == val)
+			break;
+	}
+	if (chip == INV_CHIP_NB) {
+		dev_dbg(dev, "unsupported whoami %#02x\n", val);
 		return -ENODEV;
 	}
+	st->chip = chip;
+	hw = &inv_icm42600_hw[chip];
 	st->name = hw->name;
 
 	/* reset to make sure previous state are not there */
@@ -697,7 +708,7 @@ static void inv_icm42600_disable_vddio_reg(void *_data)
 	struct inv_icm42600_state *st = _data;
 	struct device *dev = regmap_get_device(st->map);
 
-	if (pm_runtime_status_suspended(dev))
+	if (pm_runtime_enabled(dev) && pm_runtime_status_suspended(dev))
 		return;
 
 	regulator_disable(st->vddio_supply);
