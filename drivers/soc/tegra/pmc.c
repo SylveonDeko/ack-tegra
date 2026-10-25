@@ -547,6 +547,9 @@ struct tegra_pmc {
 
 	bool core_domain_state_synced;
 
+	struct clk **fb_clks;
+	unsigned int num_fb_clks;
+
 	unsigned long *wake_type_level_map;
 	unsigned long *wake_type_dual_edge_map;
 	unsigned long *wake_sw_status_map;
@@ -1456,11 +1459,90 @@ static int tegra_powergate_of_get_resets(struct tegra_powergate *pg,
 	return err;
 }
 
+static struct device_node *tegra_pmc_get_handed_over_fb(void)
+{
+	struct device_node *chosen __free(device_node) = of_find_node_by_path("/chosen");
+
+	if (!chosen)
+		return NULL;
+
+	return of_get_compatible_child(chosen, "simple-framebuffer");
+}
+
+static bool tegra_powergate_is_handed_over(struct device_node *np)
+{
+	struct device_node *fb __free(device_node) = tegra_pmc_get_handed_over_fb();
+	struct of_phandle_args args;
+	int i;
+
+	if (!fb)
+		return false;
+
+	for (i = 0; !of_parse_phandle_with_args(fb, "power-domains",
+						"#power-domain-cells", i, &args); i++) {
+		of_node_put(args.np);
+
+		if (args.np == np)
+			return true;
+	}
+
+	return false;
+}
+
+static void tegra_pmc_hold_fb_clocks(struct tegra_pmc *pmc)
+{
+	struct device_node *fb __free(device_node) = tegra_pmc_get_handed_over_fb();
+	unsigned int i;
+	int count;
+
+	if (!fb)
+		return;
+
+	count = of_count_phandle_with_args(fb, "clocks", "#clock-cells");
+	if (count <= 0)
+		return;
+
+	pmc->fb_clks = kcalloc(count, sizeof(*pmc->fb_clks), GFP_KERNEL);
+	if (!pmc->fb_clks)
+		return;
+
+	for (i = 0; i < count; i++) {
+		struct clk *clk = of_clk_get(fb, i);
+
+		if (IS_ERR(clk)) {
+			dev_warn(pmc->dev, "failed to get framebuffer clock %u: %ld\n",
+				 i, PTR_ERR(clk));
+			continue;
+		}
+
+		if (clk_prepare_enable(clk) < 0) {
+			clk_put(clk);
+			continue;
+		}
+
+		pmc->fb_clks[pmc->num_fb_clks++] = clk;
+	}
+}
+
+static void tegra_pmc_release_fb_clocks(struct tegra_pmc *pmc)
+{
+	while (pmc->num_fb_clks) {
+		struct clk *clk = pmc->fb_clks[--pmc->num_fb_clks];
+
+		clk_disable_unprepare(clk);
+		clk_put(clk);
+	}
+
+	kfree(pmc->fb_clks);
+	pmc->fb_clks = NULL;
+}
+
 static int tegra_powergate_add(struct tegra_pmc *pmc, struct device_node *np)
 {
 	struct device *dev = pmc->dev;
 	struct tegra_powergate *pg;
 	int id, err = 0;
+	bool keep = false;
 	bool off;
 
 	pg = kzalloc_obj(*pg);
@@ -1513,6 +1595,15 @@ static int tegra_powergate_add(struct tegra_pmc *pmc, struct device_node *np)
 			pr_err("failed to assert resets: %d\n", err);
 			goto remove_resets;
 		}
+	} else if (tegra_powergate_is_handed_over(np)) {
+		err = reset_control_deassert(pg->reset);
+		if (err) {
+			pr_err("failed to deassert resets: %d\n", err);
+			goto remove_resets;
+		}
+
+		reset_control_release(pg->reset);
+		keep = true;
 	} else {
 		err = tegra_powergate_power_down(pg);
 		if (err) {
@@ -1527,11 +1618,12 @@ static int tegra_powergate_add(struct tegra_pmc *pmc, struct device_node *np)
 	 * the domain and skip the genpd registration.
 	 */
 	if (!IS_ENABLED(CONFIG_PM_GENERIC_DOMAINS)) {
-		WARN_ON(tegra_powergate_power_up(pg, true));
+		if (!keep)
+			WARN_ON(tegra_powergate_power_up(pg, true));
 		goto remove_resets;
 	}
 
-	err = pm_genpd_init(&pg->genpd, NULL, true);
+	err = pm_genpd_init(&pg->genpd, NULL, !keep);
 	if (err < 0) {
 		dev_err(dev, "failed to initialise PM domain %pOFn: %d\n", np,
 		       err);
@@ -3666,6 +3758,8 @@ static int tegra_pmc_probe(struct platform_device *pdev)
 
 	debugfs_create_file("powergate", 0444, NULL, pmc, &powergate_fops);
 
+	tegra_pmc_hold_fb_clocks(pmc);
+
 	return 0;
 
 cleanup_powergates:
@@ -5251,6 +5345,8 @@ static void tegra_pmc_sync_state(struct device *dev)
 {
 	struct device_node *np, *child;
 	int err;
+
+	tegra_pmc_release_fb_clocks(pmc);
 
 	np = of_get_child_by_name(dev->of_node, "powergates");
 	if (!np)
