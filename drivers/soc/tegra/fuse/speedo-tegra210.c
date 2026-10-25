@@ -47,6 +47,40 @@ static const u32 __initconst soc_process_speedos[][SOC_PROCESS_CORNERS] = {
 	{ 1950, 2100, UINT_MAX },
 };
 
+static int sku_id = -1;
+static int cspd_id = -1;
+static int sspd_id = -1;
+static int gspd_id = -1;
+
+module_param(sku_id, int, 0400);
+module_param(cspd_id, int, 0400);
+module_param(sspd_id, int, 0400);
+module_param(gspd_id, int, 0400);
+
+static void __init override_speedo_ids(struct tegra_sku_info *sku_info)
+{
+	if (sku_id != sku_info->sku_id)
+		return;
+
+	if (cspd_id != -1) {
+		pr_warn("Tegra210: overriding CPU speedo ID %d with %d\n",
+			sku_info->cpu_speedo_id, cspd_id);
+		sku_info->cpu_speedo_id = cspd_id;
+	}
+
+	if (sspd_id != -1) {
+		pr_warn("Tegra210: overriding SoC speedo ID %d with %d\n",
+			sku_info->soc_speedo_id, sspd_id);
+		sku_info->soc_speedo_id = sspd_id;
+	}
+
+	if (gspd_id != -1) {
+		pr_warn("Tegra210: overriding GPU speedo ID %d with %d\n",
+			sku_info->gpu_speedo_id, gspd_id);
+		sku_info->gpu_speedo_id = gspd_id;
+	}
+}
+
 static u8 __init get_speedo_revision(void)
 {
 	return tegra_fuse_read_spare(4) << 2 |
@@ -194,6 +228,7 @@ void __init tegra210_init_speedo_data(struct tegra_sku_info *sku_info)
 	}
 
 	rev_sku_to_speedo_ids(sku_info, speedo_revision, &index);
+	override_speedo_ids(sku_info);
 
 	sku_info->gpu_process_id = get_process_id(sku_info->gpu_speedo_value,
 						  gpu_process_speedos[index],
