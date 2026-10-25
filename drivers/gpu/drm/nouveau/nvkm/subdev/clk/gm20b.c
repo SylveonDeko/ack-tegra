@@ -25,6 +25,7 @@
 #include <subdev/timer.h>
 #include <core/device.h>
 #include <core/tegra.h>
+#include <linux/of.h>
 
 #include "priv.h"
 #include "gk20a_devfreq.h"
@@ -80,6 +81,8 @@
 #define GPCPLL_DVFS1_DFS_CAL_DONE_SHIFT		31
 #define GPCPLL_DVFS1_DFS_CAL_DONE_WIDTH		1
 #define GPCPLL_DVFS1_DFS_CAL_DONE_BIT		BIT(31)
+#define GPCPLL_DVFS1_DFS_CTRL_SHIFT		16
+#define GPCPLL_DVFS1_DFS_CTRL_MASK		(0xfff << GPCPLL_DVFS1_DFS_CTRL_SHIFT)
 
 #define GPC_BCAST_GPCPLL_DVFS2	(GPC_BCAST_GPCPLL_CFG_BASE + 0x20)
 #define GPC_BCAST_GPCPLL_DVFS2_DFS_EXT_STROBE_BIT	BIT(16)
@@ -94,6 +97,7 @@ struct gm20b_clk_dvfs_params {
 	s32 coeff_slope;
 	s32 coeff_offs;
 	u32 vco_ctrl;
+	u32 dfs_ctrl;
 };
 
 static const struct gm20b_clk_dvfs_params gm20b_b1_dvfs_params = {
@@ -103,9 +107,10 @@ static const struct gm20b_clk_dvfs_params gm20b_b1_dvfs_params = {
 };
 
 static const struct gm20b_clk_dvfs_params gm20b_c1_dvfs_params = {
-	.coeff_slope = 0,
-	.coeff_offs = 0,
-	.vco_ctrl = 0x7 << 3,
+	.coeff_slope = -172550,
+	.coeff_offs = 195374,
+	.vco_ctrl = (0x1 << 3) | 0x7,
+	.dfs_ctrl = 0x3 << 10,
 };
 
 /*
@@ -541,7 +546,7 @@ gm20b_dvfs_program_ext_cal(struct gm20b_clk *clk, u32 dfs_det_cal)
 	u32 val;
 
 	nvkm_mask(device, GPC_BCAST_GPCPLL_DVFS2, MASK(DFS_DET_RANGE + 1),
-		  dfs_det_cal);
+		  dfs_det_cal & MASK(DFS_DET_RANGE + 1));
 	udelay(1);
 
 	val = nvkm_rd32(device, GPCPLL_DVFS1);
@@ -978,7 +983,7 @@ calibrated:
 	gm20b_dvfs_program_coeff(clk, 0);
 	gm20b_dvfs_program_ext_cal(clk, clk->dvfs.dfs_ext_cal);
 	gm20b_dvfs_program_coeff(clk, clk->dvfs.dfs_coeff);
-	gm20b_dvfs_program_dfs_detection(clk, &clk->new_dvfs);
+	gm20b_dvfs_program_dfs_detection(clk, &clk->dvfs);
 
 	return 0;
 }
@@ -1001,6 +1006,10 @@ gm20b_b01_clk_init_dvfs(struct gm20b_clk *clk)
 	if (clk->dvfs_params->vco_ctrl)
 		nvkm_mask(device, GPCPLL_CFG3, GPCPLL_CFG3_VCO_CTRL_MASK,
 		      clk->dvfs_params->vco_ctrl << GPCPLL_CFG3_VCO_CTRL_SHIFT);
+
+	if (clk->dvfs_params->dfs_ctrl)
+		nvkm_mask(device, GPCPLL_DVFS1, GPCPLL_DVFS1_DFS_CTRL_MASK,
+			  clk->dvfs_params->dfs_ctrl << GPCPLL_DVFS1_DFS_CTRL_SHIFT);
 
 	if (fused) {
 		/* Start internal calibration, but ignore results */
@@ -1054,9 +1063,33 @@ calibrated:
 	gm20b_dvfs_program_coeff(clk, 0);
 	gm20b_dvfs_program_ext_cal(clk, clk->dvfs.dfs_ext_cal);
 	gm20b_dvfs_program_coeff(clk, clk->dvfs.dfs_coeff);
-	gm20b_dvfs_program_dfs_detection(clk, &clk->new_dvfs);
+	gm20b_dvfs_program_dfs_detection(clk, &clk->dvfs);
 
 	return 0;
+}
+
+static const struct nvkm_clk_func *
+gm20b_clk_limit_pstates(struct nvkm_device_tegra *tdev,
+			const struct nvkm_clk_func *func,
+			struct nvkm_clk_func *limited)
+{
+	u32 max_khz;
+	int nr;
+
+	if (of_property_read_u32(tdev->pdev->dev.of_node,
+				 "nvidia,gpu-max-freq-khz", &max_khz))
+		return func;
+
+	for (nr = 0; nr < func->nr_pstates; nr++)
+		if (func->pstates[nr].base.domain[nv_clk_src_gpc] > max_khz)
+			break;
+
+	if (nr == 0 || nr == func->nr_pstates)
+		return func;
+
+	*limited = *func;
+	limited->nr_pstates = nr;
+	return limited;
 }
 
 /* Forward declaration to detect speedo >=1 in gm20b_clk_init() */
@@ -1306,6 +1339,7 @@ gm20b_clk_new(struct nvkm_device *device, enum nvkm_subdev_type type, int inst,
 	struct gm20b_clk *clk;
 	struct nvkm_subdev *subdev;
 	struct gk20a_clk_pllg_params *clk_params;
+	struct nvkm_clk_func *func;
 	int ret;
 
 	/* Speedo 0 GPUs cannot use noise-aware PLL */
@@ -1313,7 +1347,7 @@ gm20b_clk_new(struct nvkm_device *device, enum nvkm_subdev_type type, int inst,
 		return gm20b_clk_new_speedo0(device, type, inst, pclk);
 
 	/* Speedo >= 1, use NAPLL */
-	clk = kzalloc(sizeof(*clk) + sizeof(*clk_params), GFP_KERNEL);
+	clk = kzalloc(sizeof(*clk) + sizeof(*clk_params) + sizeof(*func), GFP_KERNEL);
 	if (!clk)
 		return -ENOMEM;
 	*pclk = &clk->base.base;
@@ -1322,7 +1356,10 @@ gm20b_clk_new(struct nvkm_device *device, enum nvkm_subdev_type type, int inst,
 	/* duplicate the clock parameters since we will patch them below */
 	clk_params = (void *) (clk + 1);
 	*clk_params = gm20b_pllg_params;
-	ret = gk20a_clk_ctor(device, type, inst, &gm20b_clk, clk_params, &clk->base);
+	func = (void *) (clk_params + 1);
+	ret = gk20a_clk_ctor(device, type, inst,
+			     gm20b_clk_limit_pstates(tdev, &gm20b_clk, func),
+			     clk_params, &clk->base);
 	if (ret)
 		return ret;
 
@@ -1366,6 +1403,7 @@ gm20b_b01_clk_new(struct nvkm_device *device, enum nvkm_subdev_type type, int in
 	struct gm20b_clk *clk;
 	struct nvkm_subdev *subdev;
 	struct gk20a_clk_pllg_params *clk_params;
+	struct nvkm_clk_func *func;
 	int ret;
 
 	/* Speedo 0 GPUs cannot use noise-aware PLL */
@@ -1373,7 +1411,7 @@ gm20b_b01_clk_new(struct nvkm_device *device, enum nvkm_subdev_type type, int in
 		return -EINVAL;
 
 	/* Speedo >= 1, use NAPLL */
-	clk = kzalloc(sizeof(*clk) + sizeof(*clk_params), GFP_KERNEL);
+	clk = kzalloc(sizeof(*clk) + sizeof(*clk_params) + sizeof(*func), GFP_KERNEL);
 	if (!clk)
 		return -ENOMEM;
 	*pclk = &clk->base.base;
@@ -1382,7 +1420,10 @@ gm20b_b01_clk_new(struct nvkm_device *device, enum nvkm_subdev_type type, int in
 	/* duplicate the clock parameters since we will patch them below */
 	clk_params = (void *) (clk + 1);
 	*clk_params = gm20b_pllg_params;
-	ret = gk20a_clk_ctor(device, type, inst, &gm20b_b01_clk, clk_params, &clk->base);
+	func = (void *) (clk_params + 1);
+	ret = gk20a_clk_ctor(device, type, inst,
+			     gm20b_clk_limit_pstates(tdev, &gm20b_b01_clk, func),
+			     clk_params, &clk->base);
 	if (ret)
 		return ret;
 
