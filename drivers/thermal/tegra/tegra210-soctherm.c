@@ -270,7 +270,7 @@ static const struct tegra_tsensor tegra210b01_tsensors[] = {
 		.calib_fuse_offset = 0x098,
 		.fuse_corr_alpha = 1085000,
 		.fuse_corr_beta = 3244200,
-		.group = &tegra210_tsensor_group_cpu,
+		.group = &tegra210b01_tsensor_group_cpu,
 	}, {
 		.name = "cpu1",
 		.base = 0xe0,
@@ -278,7 +278,7 @@ static const struct tegra_tsensor tegra210b01_tsensors[] = {
 		.calib_fuse_offset = 0x084,
 		.fuse_corr_alpha = 1126200,
 		.fuse_corr_beta = -67500,
-		.group = &tegra210_tsensor_group_cpu,
+		.group = &tegra210b01_tsensor_group_cpu,
 	}, {
 		.name = "cpu2",
 		.base = 0x100,
@@ -286,7 +286,7 @@ static const struct tegra_tsensor tegra210b01_tsensors[] = {
 		.calib_fuse_offset = 0x088,
 		.fuse_corr_alpha = 1098400,
 		.fuse_corr_beta = 2251100,
-		.group = &tegra210_tsensor_group_cpu,
+		.group = &tegra210b01_tsensor_group_cpu,
 	}, {
 		.name = "cpu3",
 		.base = 0x120,
@@ -294,7 +294,7 @@ static const struct tegra_tsensor tegra210b01_tsensors[] = {
 		.calib_fuse_offset = 0x12c,
 		.fuse_corr_alpha = 1108000,
 		.fuse_corr_beta = 602700,
-		.group = &tegra210_tsensor_group_cpu,
+		.group = &tegra210b01_tsensor_group_cpu,
 	}, {
 		.name = "gpu",
 		.base = 0x180,
@@ -302,7 +302,7 @@ static const struct tegra_tsensor tegra210b01_tsensors[] = {
 		.calib_fuse_offset = 0x154,
 		.fuse_corr_alpha = 1074300,
 		.fuse_corr_beta = 2734900,
-		.group = &tegra210_tsensor_group_gpu,
+		.group = &tegra210b01_tsensor_group_gpu,
 	}, {
 		.name = "pllx",
 		.base = 0x1a0,
@@ -310,7 +310,7 @@ static const struct tegra_tsensor tegra210b01_tsensors[] = {
 		.calib_fuse_offset = 0x160,
 		.fuse_corr_alpha = 1039700,
 		.fuse_corr_beta = 6829100,
-		.group = &tegra210_tsensor_group_pll,
+		.group = &tegra210b01_tsensor_group_pll,
 	},
 };
 
